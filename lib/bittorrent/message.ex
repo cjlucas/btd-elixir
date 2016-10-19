@@ -120,10 +120,10 @@ defmodule Bittorrent.Message do
     |> elem(1)
   end
 
-  def encoed(%Choke{}), do: << msg_id(:choke) :: size(8) >>
-  def encoed(%Unchoke{}), do: << msg_id(:unchoke) :: size(8) >>
-  def encoed(%Interested{}), do: << msg_id(:interested) :: size(8) >>
-  def encoed(%NotInterested{}), do: << msg_id(:not_interested) :: size(8) >>
+  def encode(%Choke{}), do: << msg_id(:choke) :: size(8) >>
+  def encode(%Unchoke{}), do: << msg_id(:unchoke) :: size(8) >>
+  def encode(%Interested{}), do: << msg_id(:interested) :: size(8) >>
+  def encode(%NotInterested{}), do: << msg_id(:not_interested) :: size(8) >>
 
   def encode(%Have{index: index}) do
     << msg_id(:have) :: size(8), index :: big-size(32) >>
