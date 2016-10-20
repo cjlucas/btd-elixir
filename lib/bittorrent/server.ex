@@ -21,7 +21,7 @@ defmodule Bittorrent.Server do
   end
 
   def init(port) do
-    with {:ok, sock} <- :gen_tcp.listen(port, [:binary, active: false, reuseaddr: true]),
+    with {:ok, sock} <- :gen_tcp.listen(port, [:binary, active: false, reuseaddr: true, backlog: 65535]),
          pid <- spawn_link(fn -> accept(sock) end),
       do: {:ok, %State{accept_loop_pid: pid}}
   end
