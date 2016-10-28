@@ -18,10 +18,11 @@ defmodule Tracker do
           "uploaded" => req.bytes_uploaded,
           "downloaded" => req.bytes_downloaded,
           "left" => req.bytes_left,
-          "event" => req.event,
           "port" => req.port,
           "compact" => 1,
         }
+
+        if req.event != nil, do: params = Map.put(params, "event", req.event)
 
         params = Map.merge(URI.decode_query(uri.query || ""), params) 
         with {:ok, resp} = HTTPoison.get(%{uri | query: URI.encode_query(params)}),
