@@ -1,4 +1,4 @@
-defmodule Bittorrent.Connection do
+defmodule Peer.Connection do
   use GenServer
 
   defmodule State do
@@ -9,12 +9,8 @@ defmodule Bittorrent.Connection do
     GenServer.start_link(__MODULE__, {:ok, sock})
   end
 
-  def choke do
-    # cast
-  end
-
-  def unchoke do
-    # cast
+  def send_msg(pid, msg) do
+    GenServer.cast(pid, {:send_msg, msg}) 
   end
 
   def init({:ok, sock}) do
@@ -22,6 +18,15 @@ defmodule Bittorrent.Connection do
 
     with pid <- spawn_link(fn -> recv_loop(pid, sock) end),
       do: {:ok, %State{sock: sock, recv_pid: pid}}
+  end
+
+  def handle_cast({:send_msg, msg}, state = %State{sock: sock}) do
+    case :gen_tcp.send(sock, Bittorrent.Message.encode(msg)) do
+      :ok ->
+        {:noreply, state}
+      {:error, reason} ->
+        {:stop, reason, state}
+    end
   end
 
   def handle_call({:received_message, msg}, _from, state) do
