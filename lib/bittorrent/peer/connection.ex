@@ -1,55 +1,39 @@
 defmodule Peer.Connection do
-  use GenServer
+  @behaviour :gen_fsm
 
   defmodule State do
-    defstruct sock: nil, recv_pid: nil
+    defstruct sock: nil, buffer: <<>>
   end
 
-  def start_link(sock) do
-    GenServer.start_link(__MODULE__, {:ok, sock})
+  def start_link({:in, sock}) do
+    :gen_fsm.start_link(__MODULE__, {:in, sock}, [])
   end
 
-  def send_msg(pid, msg) do
-    GenServer.cast(pid, {:send_msg, msg}) 
+  def start_link({:out, addr, port}) do
+    :gen_fsm.start_link(__MODULE__, {:out, addr, port}, [])
   end
 
-  def init({:ok, sock}) do
-    pid = self()
-
-    with pid <- spawn_link(fn -> recv_loop(pid, sock) end),
-      do: {:ok, %State{sock: sock, recv_pid: pid}}
+  def init({:in, sock}) do
+    {:ok, :wait_pstr, %State{sock: sock}}
   end
 
-  def handle_cast({:send_msg, msg}, state = %State{sock: sock}) do
-    case :gen_tcp.send(sock, Bittorrent.Message.encode(msg)) do
-      :ok ->
-        {:noreply, state}
+  def init({:out, addr, port}) do
+    case :gen_tcp.connect(addr, port, [:binary, active: false], 5000) do
+      {:ok, sock} ->
+        :gen_tcp.controlling_process(sock, self())
+        {:ok, :wait_pstr, %State{sock: sock}} # TODO: not the right state
       {:error, reason} ->
-        {:stop, reason, state}
+        {:stop, reason}
     end
   end
 
-  def handle_call({:received_message, msg}, _from, state) do
-    IO.puts("Received message: #{inspect msg}")
-    {:reply, :ok, state}
+  def wait_pstr(:consume, state) do
+    IO.puts("IN wait_pstr #{inspect state.buffer}")
+    {:next_state, :wait_pstr, state}
   end
 
-  def recv_loop(pid, sock) do
-    with {:ok, << len :: big-size(32) >>} <- :gen_tcp.recv(sock, 4),
-         {:ok, msg} <- recv_msg(sock, len) do
-           GenServer.call(pid, {:received_message, msg})
-           :gen_tcp.send(sock, Bittorrent.Message.encode(msg))
-           recv_loop(pid, sock)
-         else
-           {:error, reason} ->
-            IO.puts("Will close connection (reason: #{reason})")
-            :gen_tcp.close(sock)
-            GenServer.stop(pid, :normal)
-         end
-  end
-
-  def recv_msg(sock, len) do
-    with {:ok, data} <- :gen_tcp.recv(sock, len),
-      do: Bittorrent.Message.parse(data)
+  def handle_info({:tcp, _sock, data}, state_name, state = %State{buffer: buf}) do
+    :gen_fsm.send_event(self(), :consume)
+    {:next_state, state_name, %{state | buffer: buf <> data}}
   end
 end
