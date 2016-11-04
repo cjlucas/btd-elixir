@@ -15,6 +15,14 @@ defmodule Torrent.Store do
     GenServer.call(@name, {:register, torrent, root})
   end
 
+  def lookup(:info_hash, << hash :: byte-size(20) >>) do
+     GenServer.call(@name, {:lookup, :info_hash, hash})
+  end
+
+  def lookup(:skey_hash, << hash :: byte-size(20) >>) do
+    GenServer.call(@name, {:lookup, :skey_hash, hash})
+  end
+
   def torrents do
     GenServer.call(@name, :torrents)
   end
@@ -26,8 +34,11 @@ defmodule Torrent.Store do
   def handle_call(:torrents, _from, state), do: {:reply, Map.values(state.torrents), state}
 
   def handle_call({:register, torrent, root}, _from, state) do
+    info_hash = calc_info_hash(torrent)
+
     t = %Torrent{
-      info_hash: calc_info_hash(torrent),
+      info_hash: info_hash,
+      skey_hash: :crypto.hash(:sha, <<"req2">> <> info_hash),
       peer_id: :crypto.strong_rand_bytes(20),
       root: root,
       state: :stopped,
@@ -45,6 +56,15 @@ defmodule Torrent.Store do
         {:reply, {:error, :torrent_exists}, state}
       true ->
         {:reply, :ok, %{state | torrents: Map.put(state.torrents, t.info_hash, t)}}
+    end
+  end
+
+  def handle_call({:lookup, info_hash}, _from, state = %State{torrents: torrents}) do
+    case torrents[info_hash] do
+      nil ->
+        {:reply, {:error, :not_found}}
+      t ->
+        {:reply, {:ok, t}}
     end
   end
 
