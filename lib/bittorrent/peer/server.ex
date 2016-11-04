@@ -8,7 +8,7 @@ defmodule Peer.Server do
   @name __MODULE__
 
   defmodule State do
-    defstruct accept_pid: nil, num_conns: 0
+    defstruct accept_pid: nil
   end
 
   def start_link(port) do
@@ -29,12 +29,10 @@ defmodule Peer.Server do
 
   def handle_cast({:received_connection, sock}, state) do
     IO.puts("Received connection from somebody #{inspect sock}")
-    # TODO: should handleshake handling be done here?
-    #
-    {:ok, pid} = Peer.Connection.start_link({:in, sock})
+    {:ok, pid} = Peer.Supervisor.supervise_connection(sock)
     :ok = :gen_tcp.controlling_process(sock, pid)
     IO.puts("Started connection server #{inspect pid}")
-    {:noreply, %{state | num_conns: state.num_conns + 1}}
+    {:noreply, state}
   end
   
   defp accept(pid, sock) do
