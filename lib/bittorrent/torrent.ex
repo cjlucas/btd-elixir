@@ -7,5 +7,5 @@ defmodule Torrent.Metainfo do
 end
 
 defmodule Torrent do
-  defstruct info_hash: <<>>, skey: <<>>, peer_id: <<>>, metainfo: %Torrent.Metainfo{}, root: "", uploaded: 0, downloaded: 0, state: :stopped
+  defstruct info_hash: <<>>, skey_hash: <<>>, peer_id: <<>>, metainfo: %Torrent.Metainfo{}, root: "", uploaded: 0, downloaded: 0, state: :stopped
 end

@@ -15,11 +15,11 @@ defmodule Torrent.Store do
     GenServer.call(@name, {:register, torrent, root})
   end
 
-  def lookup(:info_hash, << hash :: byte-size(20) >>) do
+  def lookup(:info_hash, << hash :: bytes-size(20) >>) do
      GenServer.call(@name, {:lookup, :info_hash, hash})
   end
 
-  def lookup(:skey_hash, << hash :: byte-size(20) >>) do
+  def lookup(:skey_hash, << hash :: bytes-size(20) >>) do
     GenServer.call(@name, {:lookup, :skey_hash, hash})
   end
 
