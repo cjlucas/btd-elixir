@@ -60,6 +60,7 @@ IO.puts("req2 = #{inspect bin_xor.(xor, req3)}")
 
 IO.puts("vc (enc) = #{inspect vc}")
 streama = :crypto.stream_init(:rc4, keya)
+{streama, _} = :crypto.stream_decrypt(streama, :crypto.strong_rand_bytes(1024))
 {_, vc_dec} = :crypto.stream_decrypt(streama, vc)
 IO.puts("vc (dec) = #{inspect vc_dec}")
 

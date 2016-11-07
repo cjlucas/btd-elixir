@@ -25,7 +25,7 @@ bin_xor = fn bin1, bin2 ->
 end
 
 
-{:ok, conn} = :gen_tcp.connect({192, 168, 1, 11}, 64452, [:binary, active: false])
+{:ok, conn} = :gen_tcp.connect({127, 0, 0, 1}, 60451, [:binary, active: false])
 IO.puts(inspect conn)
 
 xa = 2 <<< 159
