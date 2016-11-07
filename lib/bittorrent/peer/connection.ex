@@ -29,7 +29,7 @@ defmodule Peer.Connection do
   end
 
   def start_link(:outgoing, opts = %OutOpts{}) do
-    :gen_fsm.start_link(__MODULE__, {:out, sock}, [])
+    :gen_fsm.start_link(__MODULE__, {:out, nil}, [])
   end
 
   def init({:in, sock}) do
@@ -38,7 +38,7 @@ defmodule Peer.Connection do
 
   def send_dh(:handle, state) do
     priv_key = :erlang.random((2 <<< 159) + 1) - 1
-    pub_key = :crypto.mod_pow(2, xa, @p)
+    pub_key = :crypto.mod_pow(2, priv_key, @p)
     padlen = :crypto.uniform(513) - 1
     pad = :crypto.strong_rand_bytes(padlen)
 
@@ -47,18 +47,22 @@ defmodule Peer.Connection do
     {:next_state, :recv_dh, %{state | priv_key: priv_key}}
   end
 
-  def recv_dh(:handle, state = %State{buffer: buf}) do
+  def recv_dh(:handle, state = %State{buffer: buf, priv_key: priv_key}) do
     case buf do
       << pub_key :: size(768) >> ->
         s = :crypto.mod_pow(pub_key, priv_key, @p)
         # TODO: need to check if incoming or outgoing to set proper key
-        out = :crypto.stream_init(:rc4, hash(<<"keyA"> <> s <> ))
     end
   end
 
   def handle_info({:tcp, _sock, data}, state_name, state = %State{buffer: buf}) do
     :gen_fsm.send_event(self(), :consume)
     {:next_state, state_name, %{state | buffer: buf <> data}}
+  end
+
+  def handle_info(msg, state_name, state) do
+    IO.puts(inspect msg)
+    {:next_state, state_name, state}
   end
 
   defp sha(buf) when is_binary(buf), do: :crypto.hash(:sha, buf)
