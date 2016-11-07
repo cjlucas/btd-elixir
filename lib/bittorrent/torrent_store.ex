@@ -4,7 +4,7 @@ defmodule Torrent.Store do
   @name __MODULE__
 
   defmodule State do
-    defstruct torrents: %{}
+    defstruct torrents: %{}, skey_hash_map: %{}
   end
 
   def start_link do
@@ -55,16 +55,27 @@ defmodule Torrent.Store do
       Map.has_key?(state.torrents, t.info_hash) ->
         {:reply, {:error, :torrent_exists}, state}
       true ->
-        {:reply, :ok, %{state | torrents: Map.put(state.torrents, t.info_hash, t)}}
+        torrents = Map.put(state.torrents, t.info_hash, t)
+        skey_hash_map = Map.put(state.skey_hash_map, t.skey_hash, t.info_hash)
+        {:reply, :ok, %{state | torrents: torrents, skey_hash_map: skey_hash_map}}
     end
   end
 
-  def handle_call({:lookup, info_hash}, _from, state = %State{torrents: torrents}) do
-    case torrents[info_hash] do
+  def handle_call({:lookup, :info_hash, hash}, _from, state = %State{torrents: torrents}) do
+    case torrents[hash] do
       nil ->
         {:reply, {:error, :not_found}}
       t ->
         {:reply, {:ok, t}}
+    end
+  end
+  
+  def handle_call({:lookup, :skey_hash, hash}, from, state = %State{skey_hash_map: lut}) do
+    case lut[hash] do
+      nil ->
+        {:reply, {:error, :not_found}}
+      info_hash ->
+        handle_call({:lookup, :info_hash, info_hash}, from, state)
     end
   end
 

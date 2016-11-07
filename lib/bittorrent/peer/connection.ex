@@ -1,6 +1,6 @@
 defmodule Peer.Connection do
   use Bitwise
-  @behaviour :gen_fsm
+  use GenServer
 
   @p 0xFFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A63A36210000000000090563
   @vc <<0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00>>
@@ -16,12 +16,8 @@ defmodule Peer.Connection do
     :recv_resp,
   ]
 
-  defmodule OutOpts do
-    defstruct info_hash: <<>>, peer_id: <<>>
-  end
-
   defmodule State do
-    defstruct sock: nil, buffer: <<>>, priv_key: 0, crypto_in: nil, crypto_out: nil
+    defstruct sock: nil, buffer: <<>>
   end
 
   def start_link(:incoming, sock) do
@@ -61,7 +57,7 @@ defmodule Peer.Connection do
     {:next_state, state_name, %{state | buffer: buf <> data}}
   end
 
-  defp sha(buf) when is_binary(buf), do: :crypto.hash(:sha, buf)
+  defp hash(buf), do: :crypto.hash(:sha, buf)
 
   defp bin_xor(bin1, bin2) do
     [l1, l2] = Enum.map([bin1, bin2]) |> :erlang.binary_to_list
