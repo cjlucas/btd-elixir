@@ -28,6 +28,7 @@ defmodule Peer.Supervisor do
       worker(Peer.Server, [60000]),
       supervisor(Task.Supervisor, [[name: Peer.ConnectTask.Supervisor]]),
       worker(Peer.Manager, []),
+      worker(Peer.HandshakeManager, [])
     ]
 
     supervise(children, strategy: :one_for_one)

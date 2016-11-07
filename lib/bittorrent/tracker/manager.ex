@@ -3,7 +3,7 @@ defmodule Tracker.Manager do
   require Logger
 
   @name __MODULE__
-
+  
   defmodule State do
     defstruct slots: 0, trackers: %{}, queue: :queue.new(), timers: []
   end
