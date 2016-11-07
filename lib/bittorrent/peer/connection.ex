@@ -56,16 +56,12 @@ defmodule Peer.Connection do
     {:next_state, state_name, %{state | buffer: buf <> data}}
   end
 
-<<<<<<< HEAD
-  defp hash(buf), do: :crypto.hash(:sha, buf)
-=======
   def handle_info(msg, state_name, state) do
     IO.puts(inspect msg)
     {:next_state, state_name, state}
   end
 
   defp sha(buf) when is_binary(buf), do: :crypto.hash(:sha, buf)
->>>>>>> 3b9f7e08f00feba15463aaa40557ae0bb873d5d2
 
   defp bin_xor(bin1, bin2) do
     [l1, l2] = Enum.map([bin1, bin2]) |> :erlang.binary_to_list
