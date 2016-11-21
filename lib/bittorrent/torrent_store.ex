@@ -64,16 +64,16 @@ defmodule Torrent.Store do
   def handle_call({:lookup, :info_hash, hash}, _from, state = %State{torrents: torrents}) do
     case torrents[hash] do
       nil ->
-        {:reply, {:error, :not_found}}
+        {:reply, {:error, :not_found}, state}
       t ->
-        {:reply, {:ok, t}}
+        {:reply, {:ok, t}, state}
     end
   end
   
   def handle_call({:lookup, :skey_hash, hash}, from, state = %State{skey_hash_map: lut}) do
     case lut[hash] do
       nil ->
-        {:reply, {:error, :not_found}}
+        {:reply, {:error, :not_found}, state}
       info_hash ->
         handle_call({:lookup, :info_hash, info_hash}, from, state)
     end
