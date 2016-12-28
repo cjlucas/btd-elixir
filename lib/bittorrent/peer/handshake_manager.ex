@@ -180,11 +180,6 @@ defmodule Peer.HandshakeManager do
     {:noreply, %State{incoming: false, states: @outgoing_flow, info_hash: hash, conn: conn}}
   end
 
-  def handle_info(:timeout, state) do
-    Logger.debug("in timeout")
-    Logger.debug(inspect state)
-  end
-
   def handle_info({:tcp, sock, data}, state) do
     trigger_handler()
     {:noreply, update_in(state.buffer, &([&1, data]))}
@@ -221,8 +216,6 @@ defmodule Peer.HandshakeManager do
     {privkey, pubkey} = gen_keys()
     pad = :crypto.strong_rand_bytes(rand(512))
 
-    Logger.debug("omgwtf pubkey = #{inspect pubkey}")
-
     case Connection.send(conn, [pubkey, pad]) do
       {:ok, conn} ->
         {:next_state, %{info | privkey: privkey, conn: conn}}
@@ -232,19 +225,15 @@ defmodule Peer.HandshakeManager do
   end
 
   defp handle_state(:recv_pubkey, %{buffer: buf} = info) do
-    Logger.debug("recv_pubkey, byte_size(buf) = #{iolist_size(buf)}")
     if iolist_size(buf) >= 96 do
       << pubkey :: bytes-size(96), rest :: binary >> = iolist_to_binary(buf)
-      Logger.debug("got pubkey #{inspect pubkey}")
       {:next_state, %{info | pubkey: pubkey, buffer: [rest]}}
     else
-      Logger.debug("DUDE HERE")
       :no_change
     end
   end
   
   defp handle_state(:calc_secret, %{pubkey: pub, privkey: priv} = info) do
-    Logger.debug("S = #{inspect calc_secret(pub, priv)}")
     {:next_state, %{info | secret: calc_secret(pub, priv)}}
   end
 
@@ -309,8 +298,6 @@ defmodule Peer.HandshakeManager do
   end
   
   defp handle_state(:recv_vc, %{conn: conn, expected_vc: vc, buffer: buf} = info) do
-    Logger.debug(inspect vc)
-    Logger.debug(inspect buf)
     if iolist_size(buf) >= byte_size(vc) do
       rest = sync(vc, iolist_to_binary(buf))
       if byte_size(rest) > 0 do
@@ -324,7 +311,6 @@ defmodule Peer.HandshakeManager do
   end
 
   defp handle_state(:recv_crypto_select, %{conn: conn, buffer: buf} = info) do
-    Logger.debug(inspect buf)
     if iolist_size(buf) >= byte_size(@crypto_provide) do
       << vc_enc::bytes-size(4), rest::binary>> = iolist_to_binary(buf)
       {conn, vc} = Connection.decrypt(conn, vc_enc)
@@ -349,7 +335,6 @@ defmodule Peer.HandshakeManager do
   defp handle_state(:recv_pad, %{conn: conn, buffer: buf} = info) do
     << enc_len::bytes-size(2), rest::binary >> = iolist_to_binary(buf)
     {conn, <<len::16>>} = Connection.decrypt(conn, enc_len)
-    Logger.debug("got len #{len}")
     case rest do
       << pad::bytes-size(len), rest::binary>> ->
         {conn, _} = Connection.decrypt(conn, pad)
@@ -380,8 +365,6 @@ defmodule Peer.HandshakeManager do
   end
 
   defp handle_state(:send_handshake, %{conn: conn, info_hash: info_hash} = info) do
-    Logger.debug("in send_handshake")
-    Logger.debug(inspect conn)
     case Torrent.Store.lookup(:info_hash, info_hash) do
       {:ok, t} ->
         payload = [
@@ -406,7 +389,6 @@ defmodule Peer.HandshakeManager do
     if iolist_size(buf) >= 1 do
       <<pstrlen_enc::bytes-size(1), rest::binary>> = iolist_to_binary(buf)
       {conn, <<pstrlen::8>>} = Connection.decrypt(conn, pstrlen_enc)
-      Logger.debug(inspect pstrlen)
       if pstrlen == @pstrlen do
         {:next_state, %{info | conn: conn, buffer: [rest]}}
       else
