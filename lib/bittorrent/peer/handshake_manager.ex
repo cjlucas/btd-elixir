@@ -192,22 +192,17 @@ defmodule Peer.HandshakeManager do
   # state handlers
   
   defp dispatch_handler(%{conn: conn, states: []} = state) do
-    Logger.debug("Conn finished!")
     {:stop, :normal, state}
   end
   defp dispatch_handler(%{conn: conn, states: [cur_state | rem_states]} = state) do
-    Logger.debug("cur_state = #{cur_state}")
     case handle_state(cur_state, state) do
       {:next_state, info} ->
-        Logger.debug("Got :next_state, states now: #{inspect rem_states}")
         trigger_handler() # queue the next state handler
         {:noreply, %{info | states: rem_states}}
       :no_change ->
-        Logger.debug("no_change state = #{inspect state}")
         {:noreply, state}
       {:error, reason} ->
         # TODO: proper error handling
-        IO.puts("Handler for state returned an error with reason #{reason}")
         {:noreply, state}
     end
   end

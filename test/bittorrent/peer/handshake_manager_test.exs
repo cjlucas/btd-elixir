@@ -12,7 +12,6 @@ defmodule MockTorrentStore do
   end
 
   def handle_call({:lookup, :info_hash, hash}, _from, state) do
-    IO.puts("OMGWAS CALLED")
     {:reply, {:ok, %Torrent{peer_id: <<0::20*8>>}}, state}
   end
 end
@@ -99,7 +98,6 @@ defmodule Peer.HandshakeManagerTest do
 
     {:ok, {conn, <<ialen::16>>}} = Peer.HandshakeManager.Connection.recv(conn, 2)
     assert ialen == 49+19
-    IO.puts("yay ialen assert #{ialen}")
     {:ok, {conn, <<pstrlen::8>>}} = Peer.HandshakeManager.Connection.recv(conn, 1)
     assert pstrlen == 19
 
