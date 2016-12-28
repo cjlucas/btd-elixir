@@ -29,14 +29,16 @@ defmodule Peer.Handshake do
   
   def rand(n), do: :rand.uniform(n+1) - 1
 
-  def sync(_needle, <<>>), do: <<>>
-  def sync(needle, haystack) do
+  def sync(needle, haystack), do: sync(needle, haystack, 0)
+  defp sync(needle, haystack, _offset) when byte_size(needle) > byte_size(haystack), do: haystack
+  defp sync(_needle, haystack, offset) when offset > byte_size(haystack), do: haystack
+  defp sync(needle, haystack, offset) do
     size = byte_size(needle)
     case haystack do
-      << ^needle::bytes-size(size), rest::binary >> ->
+      << _::bytes-size(offset), ^needle::bytes-size(size), rest::binary >> ->
         rest
-      << _::8, rest::binary >> ->
-        sync(needle, rest)
+      _ ->
+        sync(needle, haystack, offset+1)
     end
   end
 
@@ -97,132 +99,114 @@ defmodule Peer.HandshakeManager do
     end
   end
 
-  defmodule HandshakeInfo do
-    defstruct incoming: false, # NOTE: currently unused outside of determining state flow, may not need to be stored in struct
-              conn: nil,
-              states: [],
-              buffer: [],
-              info_hash: <<>>,
-              peer_id: <<>>, # their id
-              pubkey: <<>>, # their pubkey
-              privkey: <<>>, # our privkey
-              secret: <<>>,  # S
-              crypto_select: nil,
-              expected_vc: nil # the encrypted vc to sync on
-  end
+  @outgoing_flow [
+    :send_pubkey,
+    :recv_pubkey,
+    :calc_secret,
+    :send_reqs,
+    :init_streams,
+    :send_vc,
+    :send_crypto_provide,
+    :send_pad,
+    :send_ia,
+    :recv_vc,
+    :recv_crypto_select,
+    :recv_pad,
+    :recv_pstrlen,
+    :recv_pstr,
+    :recv_reserved,
+    :recv_info_hash,
+    :recv_peer_id,
+  ]
 
-  defmodule State do
-    @outgoing_flow [
-      :send_pubkey,
-      :recv_pubkey,
-      :calc_secret,
-      :send_reqs,
-      :init_streams,
-      :send_vc,
-      :send_crypto_provide,
-      :send_pad,
-      :send_ia,
-      :recv_vc,
-      :recv_crypto_select,
-      :recv_pad,
-      :recv_pstrlen,
-      :recv_pstr,
-      :recv_reserved,
-      :recv_info_hash,
-      :recv_peer_id,
-    ]
+  @incoming_flow [
+    :recv_pubkey,
+    :send_pubkey,
+    :calc_secret,
+    :recv_reqs
+  ]
 
-    @incoming_flow [
-      :recv_pubkey,
-      :send_pubkey,
-      :calc_secret,
-      :recv_reqs
-    ]
-    defstruct peers: %{}, buffers: %{}
-
-    def register_peer(%State{peers: peers, buffers: buffers} = state, direction, sock, info_hash \\ <<>>) do
-      flow = if direction == :in, do: @incoming_flow, else: @outgoing_flow
-      peers = Map.put(peers, sock, %HandshakeInfo{
-                      incoming: direction == :in,
-                      info_hash: info_hash,
-                      conn: %Connection{sock: sock},
-                      states: flow,
-                    })
-      buffers = Map.put(buffers, sock, [])
-
-      %{state | peers: peers, buffers: buffers}
-    end
-
-    def unregister_peer(%State{peers: peers, buffers: buffers} = state, sock) do
-      %{state | peers: Map.delete(peers, sock), buffers: Map.delete(buffers, sock)}
-    end
-  end
-
-  def start_link do
-    GenServer.start_link(@name, :ok, name: @name)
-  end
-
-  def init(:ok) do
-    {:ok, %State{}}
-  end
-
-  #def register_peer(direction, sock) do
-    #GenServer.call(@name, {:register_peer, :in, sock})
-  #end
-
-  def register_outgoing_peer(sock, info_hash) do
-    with :ok <- GenServer.call(@name, {:register_outgoing_peer, sock, info_hash}),
-         :ok <- :gen_tcp.controlling_process(sock, Process.whereis(@name))
-    do
-      :ok
-    end
-  end
-
-  def peer_info(sock) do
-    GenServer.call(@name, {:peer_info, sock})
-  end
-
-  defp trigger_handler(sock), do: GenServer.cast(@name, {:trigger_handler, sock})
-
-  def handle_call({:register_outgoing_peer, sock, info_hash}, _from, state) do
-    trigger_handler(sock)
-    {:reply, :ok, State.register_peer(state, :out, sock, info_hash)}
+  defmodule InitialState do
+    defstruct lsock: nil, host: nil, port: nil, info_hash: <<>>
   end
   
-  def handle_call({:register_incoming_peer, sock}, _from, state) do
-    trigger_handler(sock)
-    {:reply, :ok, State.register_peer(state, :in, sock)}
+  defmodule State do
+    defstruct incoming: false,
+      conn: nil,
+      states: [],
+      buffer: [],
+      info_hash: <<>>,
+      peer_id: <<>>, # their id
+      pubkey: <<>>, # their pubkey
+      privkey: <<>>, # our privkey
+      secret: <<>>,  # S
+      crypto_select: nil,
+      expected_vc: nil # the encrypted vc to sync on
   end
 
-  def handle_call({:peer_info, sock}, _from, state) do
-    IO.puts(inspect state.peers[sock])
-    {:reply, state.peers[sock], state}
+  def start_link(sock) do
+    GenServer.start_link(@name, {:listen, sock})
+  end
+  
+  def start_link(host, port, info_hash) do
+    GenServer.start_link(@name, {:connect, host, port, info_hash})
   end
 
-  def handle_cast({:trigger_handler, sock}, state), do: dispatch_handler(state.peers[sock], state)
+  defp trigger_handler, do: GenServer.cast(self(), :trigger_handler)
 
-  def handle_info({:tcp, sock, data}, %State{peers: peers} = state) do
-    trigger_handler(sock)
-    Logger.info("GOT SOME DATA info = #{inspect peers[sock]}")
-    peers = update_in(peers[sock].buffer, &([&1, data]))
-    {:noreply, %{state | peers: peers}}
+  def handle_cast(:trigger_handler, state), do: dispatch_handler(state)
+
+  def init({:listen, sock}) do
+    {:ok, %InitialState{lsock: sock}, 0}
+  end
+
+  def init({:connect, host, port, info_hash}) do
+    {:ok, %InitialState{host: host, port: port, info_hash: info_hash}, 0}
+  end
+
+  def handle_info(:timeout, %InitialState{lsock: sock}) when not is_nil(sock) do
+    {:ok, sock} = :gen_tcp.accept(sock)
+    :inet.setopts(sock, [active: true])
+    conn = %Connection{sock: sock}
+    {:noreply, %State{incoming: true, states: @incoming_flow, conn: conn}}
+  end
+  
+  def handle_info(:timeout, %InitialState{host: host, port: port, info_hash: hash}) do
+    IO.puts("in timeout here")
+    {:ok, sock} = :gen_tcp.connect(host, port, [:binary, active: true])
+    conn = %Connection{sock: sock}
+    IO.puts("GOT CONNECTION")
+    trigger_handler()
+    {:noreply, %State{incoming: false, states: @outgoing_flow, info_hash: hash, conn: conn}}
+  end
+
+  def handle_info(:timeout, state) do
+    Logger.debug("in timeout")
+    Logger.debug(inspect state)
+  end
+
+  def handle_info({:tcp, sock, data}, state) do
+    trigger_handler()
+    {:noreply, update_in(state.buffer, &([&1, data]))}
   end
 
   def handle_info({:tcp_closed, sock}, state) do
-    {:noreply, State.unregister_peer(state, sock)}
+    {:stop, :closed}
   end
 
   # state handlers
   
-  defp dispatch_handler(info, state) when is_nil(info), do: {:noreply, state}
-  defp dispatch_handler(%{conn: conn, states: [cur_state | rem_states]} = info, state) do
+  defp dispatch_handler(%{conn: conn, states: []} = state) do
+    Logger.debug("Conn finished!")
+    {:stop, :normal, state}
+  end
+  defp dispatch_handler(%{conn: conn, states: [cur_state | rem_states]} = state) do
     Logger.debug("cur_state = #{cur_state}")
-    case handle_state(cur_state, info, conn) do
+    case handle_state(cur_state, state) do
       {:next_state, info} ->
         Logger.debug("Got :next_state, states now: #{inspect rem_states}")
-        info = %{info | states: rem_states}
-        trigger_handler(conn.sock) # queue the next state handler
-        {:noreply, put_in(state.peers[conn.sock], info)}
+        trigger_handler() # queue the next state handler
+        {:noreply, %{info | states: rem_states}}
       :no_change ->
         Logger.debug("no_change state = #{inspect state}")
         {:noreply, state}
@@ -233,7 +217,7 @@ defmodule Peer.HandshakeManager do
     end
   end
   
-  defp handle_state(:send_pubkey, info, conn) do
+  defp handle_state(:send_pubkey, %{conn: conn} = info) do
     {privkey, pubkey} = gen_keys()
     pad = :crypto.strong_rand_bytes(rand(512))
 
@@ -247,7 +231,7 @@ defmodule Peer.HandshakeManager do
     end
   end
 
-  defp handle_state(:recv_pubkey, %{buffer: buf} = info, _conn) do
+  defp handle_state(:recv_pubkey, %{buffer: buf} = info) do
     Logger.debug("recv_pubkey, byte_size(buf) = #{iolist_size(buf)}")
     if iolist_size(buf) >= 96 do
       << pubkey :: bytes-size(96), rest :: binary >> = iolist_to_binary(buf)
@@ -259,12 +243,12 @@ defmodule Peer.HandshakeManager do
     end
   end
   
-  defp handle_state(:calc_secret, %{pubkey: pub, privkey: priv} = info, _conn) do
+  defp handle_state(:calc_secret, %{pubkey: pub, privkey: priv} = info) do
     Logger.debug("S = #{inspect calc_secret(pub, priv)}")
     {:next_state, %{info | secret: calc_secret(pub, priv)}}
   end
 
-  defp handle_state(:send_reqs, %{secret: s, info_hash: info_hash} = info, conn) do
+  defp handle_state(:send_reqs, %{conn: conn, secret: s, info_hash: info_hash} = info) do
     payload = [
       hash([<<"req1">>, s]),
       bin_xor(hash([<<"req2">>, info_hash]), hash([<<"req3">>, s]))
@@ -278,7 +262,7 @@ defmodule Peer.HandshakeManager do
     end
   end
 
-  defp handle_state(:recv_reqs, %{secret: s, buffer: buf} = info, _conn) do
+  defp handle_state(:recv_reqs, %{secret: s, buffer: buf} = info) do
     if iolist_size(buf) >= 40 do
       <<
         req1buf :: bytes-size(20),
@@ -299,17 +283,17 @@ defmodule Peer.HandshakeManager do
     end
   end
 
-  defp handle_state(:init_streams, %{incoming: true, secret: s, info_hash: hash} = info, conn) do
+  defp handle_state(:init_streams, %{incoming: true, conn: conn, secret: s, info_hash: hash} = info) do
     {ins, outs} = init_streams(key(<<"keyA">>, s, hash), key(<<"keyB">>, s, hash))
-    {:next_state, put_in(info.conn,  %{conn | in_stream: ins, out_stream: outs})}
+    {:next_state, put_in(info.conn, %{conn | in_stream: ins, out_stream: outs})}
   end
   
-  defp handle_state(:init_streams, %{incoming: false, secret: s, info_hash: hash} = info, conn) do
+  defp handle_state(:init_streams, %{incoming: false, conn: conn, secret: s, info_hash: hash} = info) do
     {ins, outs} = init_streams(key(<<"keyB">>, s, hash), key(<<"keyA">>, s, hash))
-    {:next_state, put_in(info.conn,  %{conn | in_stream: ins, out_stream: outs})}
+    {:next_state, put_in(info.conn, %{conn | in_stream: ins, out_stream: outs})}
   end
 
-  defp handle_state(:send_vc, info, conn) do
+  defp handle_state(:send_vc, %{conn: conn} = info) do
     case Connection.send(conn, @vc) do
       {:ok, conn} ->
         {:next_state, %{info | conn: conn}}
@@ -318,13 +302,15 @@ defmodule Peer.HandshakeManager do
     end
   end
 
-  defp handle_state(:recv_vc, %{expected_vc: vc} = info, conn) when is_nil(vc) do
+  defp handle_state(:recv_vc, %{conn: conn, expected_vc: vc} = info) when is_nil(vc) do
     {stream, vc} = :crypto.stream_encrypt(conn.in_stream, @vc)
     conn = %{conn | in_stream: stream}
-    handle_state(:recv_vc, %{info | expected_vc: vc, conn: conn}, conn)
+    handle_state(:recv_vc, %{info | expected_vc: vc, conn: conn})
   end
   
-  defp handle_state(:recv_vc, %{expected_vc: vc, buffer: buf} = info, _conn) do
+  defp handle_state(:recv_vc, %{conn: conn, expected_vc: vc, buffer: buf} = info) do
+    Logger.debug(inspect vc)
+    Logger.debug(inspect buf)
     if iolist_size(buf) >= byte_size(vc) do
       rest = sync(vc, iolist_to_binary(buf))
       if byte_size(rest) > 0 do
@@ -337,16 +323,18 @@ defmodule Peer.HandshakeManager do
     end
   end
 
-  defp handle_state(:recv_crypto_select, %{buffer: buf} = info, conn) do
+  defp handle_state(:recv_crypto_select, %{conn: conn, buffer: buf} = info) do
+    Logger.debug(inspect buf)
     if iolist_size(buf) >= byte_size(@crypto_provide) do
-      << v::32, rest::binary >> = iolist_to_binary(buf)
-      {:next_state, %{info | crypto_select: v, buffer: [rest]}}
+      << vc_enc::bytes-size(4), rest::binary>> = iolist_to_binary(buf)
+      {conn, vc} = Connection.decrypt(conn, vc_enc)
+      {:next_state, %{info | conn: conn, crypto_select: vc, buffer: [rest]}}
     else
       :no_change
     end
   end
   
-  defp handle_state(:send_crypto_provide, info, conn) do
+  defp handle_state(:send_crypto_provide, %{conn: conn} = info) do
     case Connection.send(conn, @crypto_provide) do
       {:ok, conn} ->
         {:next_state, %{info | conn: conn}}
@@ -355,21 +343,23 @@ defmodule Peer.HandshakeManager do
     end
   end
 
-  defp handle_state(:recv_pad, %{buffer: buf}, _conn) when byte_size(buf) < 2 do
+  defp handle_state(:recv_pad, %{buffer: buf}) when byte_size(buf) < 2 do
     :no_change
   end
-  
-  defp handle_state(:recv_pad, %{buffer: buf} = info, _conn) do
-    << len::16, rest::binary >> = buf
+  defp handle_state(:recv_pad, %{conn: conn, buffer: buf} = info) do
+    << enc_len::bytes-size(2), rest::binary >> = iolist_to_binary(buf)
+    {conn, <<len::16>>} = Connection.decrypt(conn, enc_len)
+    Logger.debug("got len #{len}")
     case rest do
-      << _::bytes-size(len), rest::binary>> ->
-        {:next_state, %{info | buffer: [rest]}}
+      << pad::bytes-size(len), rest::binary>> ->
+        {conn, _} = Connection.decrypt(conn, pad)
+        {:next_state, %{info | conn: conn, buffer: [rest]}}
       _ ->
         :no_change
     end
   end
 
-  defp handle_state(:send_pad, info, conn) do
+  defp handle_state(:send_pad, %{conn: conn} = info) do
     # only send len(padX)
     case Connection.send(conn, <<0x00, 0x00>>) do
       {:ok, conn} ->
@@ -379,17 +369,19 @@ defmodule Peer.HandshakeManager do
     end
   end
 
-  defp handle_state(:send_ia, info, conn) do
+  defp handle_state(:send_ia, %{conn: conn} = info) do
     ialen = 49 + @pstrlen
     case Connection.send(conn, <<ialen::16>>) do
       {:ok, conn} ->
-        handle_state(:send_handshake, info, conn)
+        handle_state(:send_handshake, %{info | conn: conn})
       {:error, reason} ->
         {:error, reason}
     end
   end
 
-  defp handle_state(:send_handshake, %{info_hash: info_hash} = info, conn) do
+  defp handle_state(:send_handshake, %{conn: conn, info_hash: info_hash} = info) do
+    Logger.debug("in send_handshake")
+    Logger.debug(inspect conn)
     case Torrent.Store.lookup(:info_hash, info_hash) do
       {:ok, t} ->
         payload = [
@@ -407,6 +399,74 @@ defmodule Peer.HandshakeManager do
         end
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  defp handle_state(:recv_pstrlen, %{conn: conn, buffer: buf} = info) do
+    if iolist_size(buf) >= 1 do
+      <<pstrlen_enc::bytes-size(1), rest::binary>> = iolist_to_binary(buf)
+      {conn, <<pstrlen::8>>} = Connection.decrypt(conn, pstrlen_enc)
+      Logger.debug(inspect pstrlen)
+      if pstrlen == @pstrlen do
+        {:next_state, %{info | conn: conn, buffer: [rest]}}
+      else
+        {:error, :bad_pstrlen}
+      end
+    else
+      :no_change
+    end
+  end
+  
+  defp handle_state(:recv_pstr, %{conn: conn, buffer: buf} = info) do
+    if iolist_size(buf) >= @pstrlen do
+      <<pstr_enc::bytes-size(@pstrlen), rest::binary>> = iolist_to_binary(buf)
+      {conn, pstr} = Connection.decrypt(conn, pstr_enc)
+      if pstr == @pstr do
+        {:next_state, %{info | conn: conn, buffer: [rest]}}
+      else
+        {:error, :bad_pstr}
+      end
+    else
+      :no_change
+    end
+  end
+  
+  defp handle_state(:recv_reserved, %{conn: conn, buffer: buf} = info) do
+    if iolist_size(buf) >= 8 do
+      <<reserved_enc::bytes-size(8), rest::binary>> = iolist_to_binary(buf)
+      {conn, reserved} = Connection.decrypt(conn, reserved_enc)
+      if reserved == <<0::64>> do
+        {:next_state, %{info | conn: conn, buffer: [rest]}}
+      else
+        {:error, :bad_reserved}
+      end
+    else
+      :no_change
+    end
+  end
+  
+  defp handle_state(:recv_info_hash, %{conn: conn, info_hash: hash, buffer: buf} = info) do
+    hashlen = byte_size(hash)
+    if iolist_size(buf) >= hashlen do
+      <<info_hash_enc::bytes-size(hashlen), rest::binary>> = iolist_to_binary(buf)
+      {conn, info_hash} = Connection.decrypt(conn, info_hash_enc)
+      if info_hash == hash do
+        {:next_state, %{info | conn: conn, buffer: [rest]}}
+      else
+        {:error, :bad_info_hash}
+      end
+    else
+      :no_change
+    end
+  end
+  
+  defp handle_state(:recv_peer_id, %{conn: conn, buffer: buf} = info) do
+    if iolist_size(buf) >= 20 do
+      <<peer_id_enc::bytes-size(20), rest::binary>> = iolist_to_binary(buf)
+      {conn, peer_id} = Connection.decrypt(conn, peer_id_enc)
+      {:next_state, %{info | conn: conn, peer_id: peer_id, buffer: [rest]}}
+    else
+      :no_change
     end
   end
 

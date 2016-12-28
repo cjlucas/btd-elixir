@@ -5,13 +5,26 @@ defmodule MockTorrentStore do
     GenServer.start_link(__MODULE__, :ok, name: Torrent.Store)
   end
 
-  def lookup(:info_hash, info_hash) do
-    IO.puts("OMGWAS CALLED")
-    {:ok, %Torrent{peer_id: <<0::20*8>>}}
-  end
+  def lookup(:info_hash, hash), do: Torrent.Store.call({:lookup, :info_hash, hash})
 
   def init(:ok) do
     {:ok, nil}
+  end
+
+  def handle_call({:lookup, :info_hash, hash}, _from, state) do
+    IO.puts("OMGWAS CALLED")
+    {:reply, {:ok, %Torrent{peer_id: <<0::20*8>>}}, state}
+  end
+end
+
+defmodule Peer.HandshakeTest do
+  use ExUnit.Case
+
+  test "sync" do
+    assert Peer.Handshake.sync(<<1, 2, 3>>, <<1, 2, 3>>) == <<>>
+    assert Peer.Handshake.sync(<<1, 2, 3>>, <<0, 1, 2, 3>>) == <<>>
+    assert Peer.Handshake.sync(<<1, 2, 3>>, <<0, 1, 2, 3, 4, 5>>) == <<4, 5>>
+    assert Peer.Handshake.sync(<<1, 2, 3>>, <<1>>) == <<1>>
   end
 end
 
@@ -35,33 +48,39 @@ defmodule Peer.HandshakeManagerTest do
     {:ok, %{listen: listen}}
   end
 
+  def sync(sock, needle, data \\ <<>>) do
+    case :gen_tcp.recv(sock, 1, 1000) do
+      {:ok, buf} ->
+        data = data <> buf
+        rest = Peer.Handshake.sync(needle, data)
+        if byte_size(data) > byte_size(rest) do
+          rest
+        else
+          sync(sock, needle, data)
+        end
+      {:error, _} ->
+        :error
+    end
+  end
+
   test "outgoing connection", ctx do
-    {:ok, _} = Peer.HandshakeManager.start_link
+    {:ok, port} = :inet.port(ctx.listen)
+    {:ok, pid} = Peer.HandshakeManager.start_link({127,0,0,1}, port, @info_hash)
     {:ok, _} = MockTorrentStore.start_link
 
-    {:ok, port} = :inet.port(ctx.listen)
-    {:ok, csock} = :gen_tcp.connect({127,0,0,1}, port, [:binary, active: true])
+    Process.flag(:trap_exit, true)
+    
     {:ok, ssock} = :gen_tcp.accept(ctx.listen)
 
-    assert Peer.HandshakeManager.register_outgoing_peer(csock, @info_hash) == :ok
-
-    {:ok, << pubA::bytes-size(96), data::binary>>} = :gen_tcp.recv(ssock, 0)
-    IO.puts("pubA = #{inspect pubA}")
+    {:ok, pubA} = :gen_tcp.recv(ssock, 96)
     
     {priv, pub} = Peer.Handshake.gen_keys()
-    IO.puts("OMGHERE #{inspect pub}")
     :ok = :gen_tcp.send(ssock, [pub, <<0::16>>])
 
     s = Peer.Handshake.calc_secret(pubA, priv)
-    IO.puts("DA S = #{inspect s}")
+    assert sync(ssock, Peer.Handshake.req1(s)) == <<>>
 
-    data = with {:ok, buf} <- :gen_tcp.recv(ssock, 0), do: data <> buf
-    IO.puts("got data #{byte_size(data)}")
-    rest = Peer.Handshake.sync(Peer.Handshake.req1(s), data)
-    assert byte_size(rest) > 0
-    data = rest
-
-    << req23::bytes-size(20), data::binary >> = data
+    {:ok, req23} = :gen_tcp.recv(ssock, 20)
     req2 = Peer.Handshake.bin_xor(Peer.Handshake.req3(s), req23)
     assert Peer.Handshake.req2(@info_hash) == req2
 
@@ -71,11 +90,43 @@ defmodule Peer.HandshakeManagerTest do
     )
 
     conn = %Peer.HandshakeManager.Connection{in_stream: ins, out_stream: outs, sock: ssock}
-    {:ok, {conn, << vc::bytes-size(8), crypto_provide::32, lenpad::8, data::binary>>}} = Peer.HandshakeManager.Connection.recv(conn, 0)
-    assert vc == <<0::64>>
+    {:ok, {conn, << vc::bytes-size(8), crypto_provide::32, lenpad::16>>}} = Peer.HandshakeManager.Connection.recv(conn, 14)
+    assert vc == <<0::8*8>>
 
-    <<pad::bytes-size(lenpad), data::binary>> = data
-    <<pstrlen::8, data::binary>> = data
+    if lenpad > 0 do
+      {:ok, _} = :gen_tcp.recv(ssock, lenpad)
+    end
+
+    {:ok, {conn, <<ialen::16>>}} = Peer.HandshakeManager.Connection.recv(conn, 2)
+    assert ialen == 49+19
+    IO.puts("yay ialen assert #{ialen}")
+    {:ok, {conn, <<pstrlen::8>>}} = Peer.HandshakeManager.Connection.recv(conn, 1)
     assert pstrlen == 19
+
+    {:ok, {conn, pstr}} = Peer.HandshakeManager.Connection.recv(conn, pstrlen)
+    assert pstr == "BitTorrent protocol"
+
+    {:ok, {conn, reserved}} = Peer.HandshakeManager.Connection.recv(conn, 8)
+    assert reserved == <<0::64>>
+
+    {:ok, {conn, info_hash}} = Peer.HandshakeManager.Connection.recv(conn, 20)
+    assert info_hash == @info_hash
+
+    # TODO: assert peer id is correct
+    {:ok, {conn, _}} = Peer.HandshakeManager.Connection.recv(conn, 20)
+
+
+    Peer.HandshakeManager.Connection.send(conn, [
+      <<0::64>>,
+      <<3::32>>,
+      <<0::16>>,
+      <<19::8>>,
+      "BitTorrent protocol",
+      <<0::64>>,
+      @info_hash,
+      <<0::20*8>>
+    ])
+
+    assert_receive {:EXIT, ^pid, :normal}
   end
 end
