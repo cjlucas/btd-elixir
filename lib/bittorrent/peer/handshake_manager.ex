@@ -172,36 +172,34 @@ defmodule Peer.HandshakeManager do
   end
   
   def handle_info(:timeout, %InitialState{host: host, port: port, info_hash: hash}) do
-    IO.puts("in timeout here")
     {:ok, sock} = :gen_tcp.connect(host, port, [:binary, active: true])
     conn = %Connection{sock: sock}
-    IO.puts("GOT CONNECTION")
     trigger_handler()
     {:noreply, %State{incoming: false, states: @outgoing_flow, info_hash: hash, conn: conn}}
   end
 
-  def handle_info({:tcp, sock, data}, state) do
+  def handle_info({:tcp, _sock, data}, state) do
     trigger_handler()
     {:noreply, update_in(state.buffer, &([&1, data]))}
   end
 
-  def handle_info({:tcp_closed, sock}, state) do
+  def handle_info({:tcp_closed, _sock}, _state) do
     {:stop, :closed}
   end
 
   # state handlers
   
-  defp dispatch_handler(%{conn: conn, states: []} = state) do
+  defp dispatch_handler(%{states: []} = state) do
     {:stop, :normal, state}
   end
-  defp dispatch_handler(%{conn: conn, states: [cur_state | rem_states]} = state) do
+  defp dispatch_handler(%{states: [cur_state | rem_states]} = state) do
     case handle_state(cur_state, state) do
       {:next_state, info} ->
         trigger_handler() # queue the next state handler
         {:noreply, %{info | states: rem_states}}
       :no_change ->
         {:noreply, state}
-      {:error, reason} ->
+      {:error, _} ->
         # TODO: proper error handling
         {:noreply, state}
     end
@@ -292,7 +290,7 @@ defmodule Peer.HandshakeManager do
     handle_state(:recv_vc, %{info | expected_vc: vc, conn: conn})
   end
   
-  defp handle_state(:recv_vc, %{conn: conn, expected_vc: vc, buffer: buf} = info) do
+  defp handle_state(:recv_vc, %{expected_vc: vc, buffer: buf} = info) do
     if iolist_size(buf) >= byte_size(vc) do
       rest = sync(vc, iolist_to_binary(buf))
       if byte_size(rest) > 0 do
@@ -447,7 +445,7 @@ defmodule Peer.HandshakeManager do
     end
   end
 
-  defp handle_state(state, _info, _conn) do
-    raise "Unhandled state #{state}"
+  defp handle_state(state_name, _state) do
+    raise "Unhandled state #{state_name}"
   end
 end

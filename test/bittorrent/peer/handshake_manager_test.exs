@@ -11,7 +11,7 @@ defmodule MockTorrentStore do
     {:ok, nil}
   end
 
-  def handle_call({:lookup, :info_hash, hash}, _from, state) do
+  def handle_call({:lookup, :info_hash, _hash}, _from, state) do
     {:reply, {:ok, %Torrent{peer_id: <<0::20*8>>}}, state}
   end
 end
@@ -89,7 +89,7 @@ defmodule Peer.HandshakeManagerTest do
     )
 
     conn = %Peer.HandshakeManager.Connection{in_stream: ins, out_stream: outs, sock: ssock}
-    {:ok, {conn, << vc::bytes-size(8), crypto_provide::32, lenpad::16>>}} = Peer.HandshakeManager.Connection.recv(conn, 14)
+    {:ok, {conn, <<vc::bytes-size(8), _::32, lenpad::16>>}} = Peer.HandshakeManager.Connection.recv(conn, 14)
     assert vc == <<0::8*8>>
 
     if lenpad > 0 do
