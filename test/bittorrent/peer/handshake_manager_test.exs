@@ -49,6 +49,7 @@ defmodule Peer.HandshakeTest do
     {:ok, listen} = :gen_tcp.listen(0, [:binary, active: false])
     {:ok, _} = Peer.Handshake.Supervisor.start_link
     {:ok, _} = MockTorrentStore.start_link([@info_hash])
+    {:ok, _} = Peer.Registry.start_link
 
     on_exit fn -> 
       :gen_tcp.close(listen)

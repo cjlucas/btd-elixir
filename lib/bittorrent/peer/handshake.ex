@@ -129,10 +129,20 @@ defmodule Peer.Handshake do
 
   # state handlers
   
-  defp dispatch_handler(%{conn: conn, states: []} = state) do
+  defp dispatch_handler(%{conn: conn, info_hash: h, peer_id: id, buffer: buf, states: []} = state) do
     Logger.debug("All done")
-    :inet.setopts(conn.sock, [active: false])
-    {:stop, :normal, state}
+    with :ok <- :inet.setopts(conn.sock, [active: false]),
+      {:ok, pid} <- Peer.Connection.start_link(conn),
+      :ok <- :inet.setopts(conn.sock, [active: true]) do
+        send(pid, {:tcp, conn.sock, iolist_to_binary(buf)})
+        :gen_tcp.controlling_process(conn.sock, pid)
+        Peer.Registry.register(h, id, pid)
+        {:stop, :normal, state}
+    else
+      {:error, reason} ->
+        Logger.debug("Error occured while transferring socket: #{reason}")
+        {:stop, :kill, state}
+    end
   end
   defp dispatch_handler(%{states: [cur_state | rem_states]} = state) do
     Logger.debug("cur_state = #{cur_state}")

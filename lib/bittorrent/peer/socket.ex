@@ -22,6 +22,10 @@ defmodule Peer.Socket do
     end
   end
 
+  def decrypt(%__MODULE__{in_stream: stream} = conn, data) when is_nil(stream) do
+    {conn, data}
+  end
+
   def decrypt(%__MODULE__{in_stream: stream} = conn, data) do
     {stream, data} = :crypto.stream_decrypt(stream, data)
     {%{conn | in_stream: stream}, data}
