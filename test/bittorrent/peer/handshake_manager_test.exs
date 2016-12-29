@@ -48,7 +48,7 @@ defmodule Peer.HandshakeUtilsTest do
   end
 end
 
-defmodule Peer.HandshakeManagerTest do
+defmodule Peer.HandshakeTest do
   use ExUnit.Case
 
   @info_hash <<
@@ -85,7 +85,7 @@ defmodule Peer.HandshakeManagerTest do
 
   test "outgoing connection", ctx do
     {:ok, port} = :inet.port(ctx.listen)
-    {:ok, pid} = Peer.HandshakeManager.start_link({127,0,0,1}, port, @info_hash)
+    {:ok, pid} = Peer.Handshake.start_link({127,0,0,1}, port, @info_hash)
     {:ok, _} = MockTorrentStore.start_link([@info_hash])
 
     Process.flag(:trap_exit, true)
@@ -153,7 +153,7 @@ defmodule Peer.HandshakeManagerTest do
 
   test "incoming connection", ctx do
     Process.flag(:trap_exit, true)
-    {:ok, pid} = Peer.HandshakeManager.start_link(ctx.listen)
+    {:ok, pid} = Peer.Handshake.start_link(ctx.listen)
     {:ok, _} = MockTorrentStore.start_link([@info_hash])
 
     {:ok, port} = :inet.port(ctx.listen)

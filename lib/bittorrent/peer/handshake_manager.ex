@@ -1,4 +1,4 @@
-defmodule Peer.HandshakeManager do
+defmodule Peer.Handshake do
   import Peer.HandshakeUtils
   import :erlang, only: [iolist_size: 1, iolist_to_binary: 1]
   use GenServer
