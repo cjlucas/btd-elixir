@@ -35,19 +35,6 @@ defmodule MockTorrentStore do
   end
 end
 
-defmodule Peer.HandshakeUtilsTest do
-  use ExUnit.Case
-
-  test "sync" do
-    import Peer.HandshakeUtils, only: [sync: 2]
-
-    assert sync(<<1, 2, 3>>, <<1, 2, 3>>) == <<>>
-    assert sync(<<1, 2, 3>>, <<0, 1, 2, 3>>) == <<>>
-    assert sync(<<1, 2, 3>>, <<0, 1, 2, 3, 4, 5>>) == <<4, 5>>
-    assert sync(<<1, 2, 3>>, <<1>>) == <<1>>
-  end
-end
-
 defmodule Peer.HandshakeTest do
   use ExUnit.Case
 
@@ -133,7 +120,6 @@ defmodule Peer.HandshakeTest do
 
     # TODO: assert peer id is correct
     {:ok, {conn, _}} = Peer.Socket.recv(conn, 20)
-
 
     Peer.Socket.send(conn, [
       <<0::64>>,
