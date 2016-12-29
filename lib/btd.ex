@@ -1,2 +1,0 @@
-defmodule Btd do
-end

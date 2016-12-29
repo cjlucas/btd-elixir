@@ -1,6 +1,6 @@
-defmodule BtdTest do
+defmodule FileStreamManagerTest do
   use ExUnit.Case
-  doctest Btd
+  doctest FileStreamManager
 
   test "the truth" do
     assert 1 + 1 == 2
