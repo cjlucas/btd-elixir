@@ -101,16 +101,20 @@ defmodule Peer.Handshake do
         conn = %Peer.Socket{sock: sock}
         Peer.Handshake.Supervisor.listen(lsock)
         {:noreply, %State{incoming: true, states: @incoming_flow, conn: conn}}
-      {:error, reason} ->
+      {:error, _} ->
         {:stop, :normal, state}
     end
   end
   
   def handle_info(:timeout, %InitialState{host: host, port: port, info_hash: hash}) do
-    {:ok, sock} = :gen_tcp.connect(host, port, [:binary, active: true])
-    conn = %Peer.Socket{sock: sock}
-    trigger_handler()
-    {:noreply, %State{incoming: false, states: @outgoing_flow, info_hash: hash, conn: conn}}
+    case :gen_tcp.connect(host, port, [:binary, active: true]) do
+      {:ok, sock} ->
+        conn = %Peer.Socket{sock: sock}
+        trigger_handler()
+        {:noreply, %State{incoming: false, states: @outgoing_flow, info_hash: hash, conn: conn}}
+      {:error, _} ->
+        {:stop, :normal, state}
+    end
   end
 
   def handle_info({:tcp, _sock, data}, state) do
