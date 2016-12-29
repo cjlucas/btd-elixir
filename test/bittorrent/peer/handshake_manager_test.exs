@@ -47,6 +47,8 @@ defmodule Peer.HandshakeTest do
 
   setup do
     {:ok, listen} = :gen_tcp.listen(0, [:binary, active: false])
+    {:ok, _} = Peer.Handshake.Supervisor.start_link
+    {:ok, _} = MockTorrentStore.start_link([@info_hash])
 
     on_exit fn -> 
       :gen_tcp.close(listen)
@@ -73,7 +75,6 @@ defmodule Peer.HandshakeTest do
   test "outgoing connection", ctx do
     {:ok, port} = :inet.port(ctx.listen)
     {:ok, pid} = Peer.Handshake.start_link({127,0,0,1}, port, @info_hash)
-    {:ok, _} = MockTorrentStore.start_link([@info_hash])
 
     Process.flag(:trap_exit, true)
     
@@ -140,7 +141,6 @@ defmodule Peer.HandshakeTest do
   test "incoming connection", ctx do
     Process.flag(:trap_exit, true)
     {:ok, pid} = Peer.Handshake.start_link(ctx.listen)
-    {:ok, _} = MockTorrentStore.start_link([@info_hash])
 
     {:ok, port} = :inet.port(ctx.listen)
     {:ok, csock} = :gen_tcp.connect({127,0,0,1}, port, [:binary, active: false])
