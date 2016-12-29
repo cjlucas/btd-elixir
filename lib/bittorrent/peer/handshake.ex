@@ -94,12 +94,16 @@ defmodule Peer.Handshake do
     {:ok, %InitialState{host: host, port: port, info_hash: info_hash}, 0}
   end
 
-  def handle_info(:timeout, %InitialState{lsock: lsock}) when not is_nil(lsock) do
-    {:ok, sock} = :gen_tcp.accept(lsock)
-    :inet.setopts(sock, [active: true])
-    conn = %Peer.Socket{sock: sock}
-    Peer.Handshake.Supervisor.listen(lsock)
-    {:noreply, %State{incoming: true, states: @incoming_flow, conn: conn}}
+  def handle_info(:timeout, %InitialState{lsock: lsock} = state) when not is_nil(lsock) do
+    case :gen_tcp.accept(lsock) do
+      {:ok, sock} ->
+        :inet.setopts(sock, [active: true])
+        conn = %Peer.Socket{sock: sock}
+        Peer.Handshake.Supervisor.listen(lsock)
+        {:noreply, %State{incoming: true, states: @incoming_flow, conn: conn}}
+      {:error, reason} ->
+        {:stop, :normal, state}
+    end
   end
   
   def handle_info(:timeout, %InitialState{host: host, port: port, info_hash: hash}) do
