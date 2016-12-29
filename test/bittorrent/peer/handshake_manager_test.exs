@@ -13,7 +13,7 @@ defmodule MockTorrentStore do
   def lookup(:skey_hash, hash), do: Torrent.Store.call({:lookup, :skey_hash, hash})
 
   def init(hashes) do
-    map = for h <- hashes, into: %{}, do: {Peer.Handshake.req2(h), h}
+    map = for h <- hashes, into: %{}, do: {Peer.HandshakeUtils.req2(h), h}
     hashes = for h <- hashes, into: MapSet.new, do: h
     {:ok, %State{req2_map: map, hashes: hashes}}
   end
@@ -35,14 +35,16 @@ defmodule MockTorrentStore do
   end
 end
 
-defmodule Peer.HandshakeTest do
+defmodule Peer.HandshakeUtilsTest do
   use ExUnit.Case
 
   test "sync" do
-    assert Peer.Handshake.sync(<<1, 2, 3>>, <<1, 2, 3>>) == <<>>
-    assert Peer.Handshake.sync(<<1, 2, 3>>, <<0, 1, 2, 3>>) == <<>>
-    assert Peer.Handshake.sync(<<1, 2, 3>>, <<0, 1, 2, 3, 4, 5>>) == <<4, 5>>
-    assert Peer.Handshake.sync(<<1, 2, 3>>, <<1>>) == <<1>>
+    import Peer.HandshakeUtils, only: [sync: 2]
+
+    assert sync(<<1, 2, 3>>, <<1, 2, 3>>) == <<>>
+    assert sync(<<1, 2, 3>>, <<0, 1, 2, 3>>) == <<>>
+    assert sync(<<1, 2, 3>>, <<0, 1, 2, 3, 4, 5>>) == <<4, 5>>
+    assert sync(<<1, 2, 3>>, <<1>>) == <<1>>
   end
 end
 
@@ -70,7 +72,7 @@ defmodule Peer.HandshakeManagerTest do
     case :gen_tcp.recv(sock, 1, 1000) do
       {:ok, buf} ->
         data = data <> buf
-        rest = Peer.Handshake.sync(needle, data)
+        rest = Peer.HandshakeUtils.sync(needle, data)
         if byte_size(data) > byte_size(rest) do
           rest
         else
@@ -92,19 +94,19 @@ defmodule Peer.HandshakeManagerTest do
 
     {:ok, pubA} = :gen_tcp.recv(ssock, 96)
     
-    {priv, pub} = Peer.Handshake.gen_keys()
+    {priv, pub} = Peer.HandshakeUtils.gen_keys()
     :ok = :gen_tcp.send(ssock, [pub, <<0::16>>])
 
-    s = Peer.Handshake.calc_secret(pubA, priv)
-    assert sync(ssock, Peer.Handshake.req1(s)) == <<>>
+    s = Peer.HandshakeUtils.calc_secret(pubA, priv)
+    assert sync(ssock, Peer.HandshakeUtils.req1(s)) == <<>>
 
     {:ok, req23} = :gen_tcp.recv(ssock, 20)
-    req2 = Peer.Handshake.bin_xor(Peer.Handshake.req3(s), req23)
-    assert Peer.Handshake.req2(@info_hash) == req2
+    req2 = Peer.HandshakeUtils.bin_xor(Peer.HandshakeUtils.req3(s), req23)
+    assert Peer.HandshakeUtils.req2(@info_hash) == req2
 
-    {ins, outs} = Peer.Handshake.init_streams(
-      Peer.Handshake.key(<<"keyA">>, s, @info_hash),
-      Peer.Handshake.key(<<"keyB">>, s, @info_hash)
+    {ins, outs} = Peer.HandshakeUtils.init_streams(
+      Peer.HandshakeUtils.key(<<"keyA">>, s, @info_hash),
+      Peer.HandshakeUtils.key(<<"keyB">>, s, @info_hash)
     )
 
     conn = %Peer.HandshakeManager.Connection{in_stream: ins, out_stream: outs, sock: ssock}
@@ -157,24 +159,24 @@ defmodule Peer.HandshakeManagerTest do
     {:ok, port} = :inet.port(ctx.listen)
     {:ok, csock} = :gen_tcp.connect({127,0,0,1}, port, [:binary, active: false])
 
-    {priv, pub} = Peer.Handshake.gen_keys()
+    {priv, pub} = Peer.HandshakeUtils.gen_keys()
     :ok = :gen_tcp.send(csock, [pub, <<0::16>>])
     
     {:ok, pubB} = :gen_tcp.recv(csock, 96)
 
-    s = Peer.Handshake.calc_secret(pubB, priv)
+    s = Peer.HandshakeUtils.calc_secret(pubB, priv)
 
     :ok = :gen_tcp.send(csock, [
-      Peer.Handshake.req1(s),
-      Peer.Handshake.bin_xor(
-        Peer.Handshake.req2(@info_hash),
-        Peer.Handshake.req3(s)
+      Peer.HandshakeUtils.req1(s),
+      Peer.HandshakeUtils.bin_xor(
+        Peer.HandshakeUtils.req2(@info_hash),
+        Peer.HandshakeUtils.req3(s)
       )
     ])
     
-    {ins, outs} = Peer.Handshake.init_streams(
-      Peer.Handshake.key(<<"keyB">>, s, @info_hash),
-      Peer.Handshake.key(<<"keyA">>, s, @info_hash)
+    {ins, outs} = Peer.HandshakeUtils.init_streams(
+      Peer.HandshakeUtils.key(<<"keyB">>, s, @info_hash),
+      Peer.HandshakeUtils.key(<<"keyA">>, s, @info_hash)
     )
 
     conn = %Peer.HandshakeManager.Connection{in_stream: ins, out_stream: outs, sock: csock}
@@ -200,7 +202,6 @@ defmodule Peer.HandshakeManagerTest do
     {:ok, {conn, <<_::32, lenpad::16>>}} = Peer.HandshakeManager.Connection.recv(conn, 6)
 
     if lenpad > 0 do
-      IO.puts("IM HERE FOR SOME REASON")
       {:ok, _} = Peer.HandshakeManager.Connection.recv(csock, lenpad)
     end
 
