@@ -123,7 +123,21 @@ defmodule Peer.HandshakeManager do
     :recv_pubkey,
     :send_pubkey,
     :calc_secret,
-    :recv_reqs
+    :recv_reqs,
+    :init_streams,
+    :recv_vc,
+    :recv_crypto_provide,
+    :recv_pad,
+    :recv_ialen,
+    :recv_pstrlen,
+    :recv_pstr,
+    :recv_reserved,
+    :recv_info_hash,
+    :recv_peer_id,
+    :send_vc,
+    :send_crypto_provide, # TODO: implement send_crypto_select
+    :send_pad,
+    :send_handshake,
   ]
 
   defmodule InitialState do
@@ -184,23 +198,28 @@ defmodule Peer.HandshakeManager do
   end
 
   def handle_info({:tcp_closed, _sock}, _state) do
+    Logger.debug("in tcp_closed")
     {:stop, :closed}
   end
 
   # state handlers
   
-  defp dispatch_handler(%{states: []} = state) do
+  defp dispatch_handler(%{conn: conn, states: []} = state) do
+    Logger.debug("All done")
+    :inet.setopts(conn.sock, [active: false])
     {:stop, :normal, state}
   end
   defp dispatch_handler(%{states: [cur_state | rem_states]} = state) do
+    Logger.debug("cur_state = #{cur_state}")
     case handle_state(cur_state, state) do
       {:next_state, info} ->
         trigger_handler() # queue the next state handler
         {:noreply, %{info | states: rem_states}}
       :no_change ->
         {:noreply, state}
-      {:error, _} ->
+      {:error, reason} ->
         # TODO: proper error handling
+        Logger.debug("handle_state received error (state = #{cur_state}, reason = #{reason})")
         {:noreply, state}
     end
   end
@@ -227,6 +246,7 @@ defmodule Peer.HandshakeManager do
   end
   
   defp handle_state(:calc_secret, %{pubkey: pub, privkey: priv} = info) do
+    Logger.debug("calc_secret S = #{inspect calc_secret(pub, priv)}")
     {:next_state, %{info | secret: calc_secret(pub, priv)}}
   end
 
@@ -246,19 +266,26 @@ defmodule Peer.HandshakeManager do
 
   defp handle_state(:recv_reqs, %{secret: s, buffer: buf} = info) do
     if iolist_size(buf) >= 40 do
-      <<
-        req1buf :: bytes-size(20),
-        req23buf :: bytes-size(20),
-        rest :: binary
-      >> = iolist_to_binary(buf)
+      buf = iolist_to_binary(buf)
+      synced_buf = sync(req1(s), buf)
+      if buf == synced_buf do
+        :no_change
+      else
+        # FIXME: we're not guaranteed at least 20 bytes here
+        <<
+          req23buf :: bytes-size(20),
+          rest :: binary
+        >> = synced_buf
 
-      # TODO: extract lookup req2 in torrent store
-
-      case req1(s) do
-        ^req1buf ->
-          {:next_state, %{info | buffer: [rest]}}
-        _ ->
-          {:error, :bad_req1}
+        skey_hash = bin_xor(req23buf, req3(s))
+        case Torrent.Store.lookup(:skey_hash, skey_hash) do
+          {:ok, t} ->
+            Logger.debug("GOT TORRENT! #{inspect t.info_hash}")
+            {:next_state, %{info | info_hash: t.info_hash, buffer: [rest]}}
+          {:error, reason} ->
+            Logger.debug("Torrent store lookup failed (reason = #{reason})")
+            {:error, reason}
+        end
       end
     else
       :no_change
@@ -292,7 +319,11 @@ defmodule Peer.HandshakeManager do
   
   defp handle_state(:recv_vc, %{expected_vc: vc, buffer: buf} = info) do
     if iolist_size(buf) >= byte_size(vc) do
+      Logger.debug("recv_vc")
+      Logger.debug(inspect vc)
+      Logger.debug(inspect buf)
       rest = sync(vc, iolist_to_binary(buf))
+      Logger.debug("rest = #{inspect rest}")
       if byte_size(rest) > 0 do
         {:next_state, %{info | buffer: [rest]}}
       else
@@ -305,9 +336,20 @@ defmodule Peer.HandshakeManager do
 
   defp handle_state(:recv_crypto_select, %{conn: conn, buffer: buf} = info) do
     if iolist_size(buf) >= byte_size(@crypto_provide) do
-      << vc_enc::bytes-size(4), rest::binary>> = iolist_to_binary(buf)
-      {conn, vc} = Connection.decrypt(conn, vc_enc)
-      {:next_state, %{info | conn: conn, crypto_select: vc, buffer: [rest]}}
+      << cs_enc::bytes-size(4), rest::binary>> = iolist_to_binary(buf)
+      {conn, cs} = Connection.decrypt(conn, cs_enc)
+      {:next_state, %{info | conn: conn, crypto_select: cs, buffer: [rest]}}
+    else
+      :no_change
+    end
+  end
+  
+  defp handle_state(:recv_crypto_provide, %{conn: conn, buffer: buf} = info) do
+    if iolist_size(buf) >= byte_size(@crypto_provide) do
+      << cp_enc::bytes-size(4), rest::binary>> = iolist_to_binary(buf)
+      {conn, cp} = Connection.decrypt(conn, cp_enc)
+      Logger.debug("cp = #{inspect cp}")
+      {:next_state, %{info | conn: conn, crypto_select: cp, buffer: [rest]}}
     else
       :no_change
     end
@@ -326,8 +368,10 @@ defmodule Peer.HandshakeManager do
     :no_change
   end
   defp handle_state(:recv_pad, %{conn: conn, buffer: buf} = info) do
+    Logger.debug(iolist_size(buf))
     << enc_len::bytes-size(2), rest::binary >> = iolist_to_binary(buf)
     {conn, <<len::16>>} = Connection.decrypt(conn, enc_len)
+    Logger.debug(len)
     case rest do
       << pad::bytes-size(len), rest::binary>> ->
         {conn, _} = Connection.decrypt(conn, pad)
@@ -344,6 +388,18 @@ defmodule Peer.HandshakeManager do
         {:next_state, %{info | conn: conn}}
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+  
+  defp handle_state(:recv_ialen, %{conn: conn, buffer: buf} = info) do
+    ialen = 49 + @pstrlen
+    if iolist_size(buf) >= 2 do
+      <<ialen_enc::bytes-size(2), rest::binary>> = iolist_to_binary(buf)
+      {conn, <<ialen::16>>} = Connection.decrypt(conn, ialen_enc)
+      Logger.debug("recv_ialen (ialen = #{ialen})")
+      {:next_state, %{info | conn: conn, buffer: [rest]}}
+    else
+      :no_change
     end
   end
 
