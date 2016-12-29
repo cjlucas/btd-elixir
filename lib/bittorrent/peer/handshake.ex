@@ -106,7 +106,7 @@ defmodule Peer.Handshake do
     end
   end
   
-  def handle_info(:timeout, %InitialState{host: host, port: port, info_hash: hash}) do
+  def handle_info(:timeout, %InitialState{host: host, port: port, info_hash: hash} = state) do
     case :gen_tcp.connect(host, port, [:binary, active: true]) do
       {:ok, sock} ->
         conn = %Peer.Socket{sock: sock}
