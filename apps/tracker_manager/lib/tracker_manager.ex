@@ -12,4 +12,8 @@ defmodule TrackerManager do
 
     Supervisor.start_link(children, strategy: :one_for_one)
   end
+
+  def add_event_handler(handler, opts) do
+    Tracker.EventManager.add_handler(handler, opts)
+  end
 end
