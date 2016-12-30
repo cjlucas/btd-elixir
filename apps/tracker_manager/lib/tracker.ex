@@ -22,7 +22,13 @@ defmodule Tracker do
           "compact" => 1,
         }
 
-        if req.event != nil, do: params = Map.put(params, "event", req.event)
+        params =
+          cond do
+            req.event != nil ->
+              Map.put(params, "event", req.event)
+            true ->
+              params
+          end
 
         params = Map.merge(URI.decode_query(uri.query || ""), params) 
         with {:ok, resp} = HTTPoison.get(%{uri | query: URI.encode_query(params)}),
