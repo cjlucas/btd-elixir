@@ -36,6 +36,9 @@ defmodule TrackerManager.Mixfile do
   #
   # Type "mix help deps" for more examples and options
   defp deps do
-    []
+    [
+      {:bento, "~> 0.9.2"},
+      {:httpoison, "~> 0.9.0"}
+    ]
   end
 end
