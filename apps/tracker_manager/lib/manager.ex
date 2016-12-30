@@ -42,18 +42,18 @@ defmodule Tracker.Manager do
     {:reply, :ok, new_state}
   end
 
+  def handle_call({:register_timer, url, duration}, _from, state = %State{timers: timers}) do
+    tref = :timer.send_after(:timer.seconds(duration), {:timer_fired, url})
+    {:reply, :ok, %{state | timers: [tref | timers]}}
+  end
+  
   def handle_cast({:request, url}, state = %State{slots: slots}) when slots > 0 do
     dispatch(url, state.trackers[url])
     {:noreply, %{state | slots: slots-1}}
   end
-  
+
   def handle_cast({:request, url}, state = %State{slots: slots, queue: q}) when slots == 0 do
     {:noreply, %{state | queue: :queue.in(url, q)}}
-  end
-
-  def handle_call({:register_timer, url, duration}, _from, state = %State{timers: timers}) do
-    tref = :timer.send_after(:timer.seconds(duration), {:timer_fired, url})
-    {:reply, :ok, %{state | timers: [tref | timers]}}
   end
 
   def handle_info({:timer_fired, url}, state) do
@@ -80,6 +80,7 @@ defmodule Tracker.Manager do
     {:ok, pid} = Task.Supervisor.start_child(Tracker.Worker.Supervisor, fn ->
       Logger.info("Sending request: #{inspect req}")
       {:ok, resp} = Tracker.request(req)
+      Tracker.EventManager.received_response(resp)
       Logger.info("Got response #{inspect resp}. Queuing request to fire after #{resp.interval} seconds")
 
       if resp.interval > 0, do: register_timer(url, resp.interval)
