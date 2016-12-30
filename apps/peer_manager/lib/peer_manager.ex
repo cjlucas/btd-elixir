@@ -6,8 +6,8 @@ defmodule PeerManager do
 
     children = [
       worker(Peer.Registry, []),
-      worker(Peer.Handshake.Supervisor, []),
-      worker(Peer.Connection.Supervisor, []),
+      supervisor(Peer.Handshake.Supervisor, []),
+      supervisor(Peer.Connection.Supervisor, []),
     ]
 
     Supervisor.start_link(children, [strategy: :one_for_one])
