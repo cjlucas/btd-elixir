@@ -99,6 +99,7 @@ defmodule Peer.Handshake do
       {:ok, sock} ->
         :inet.setopts(sock, [active: true])
         conn = %Peer.Socket{sock: sock}
+        Peer.Handshake.Supervisor.listen(lsock)
         {:noreply, %State{incoming: true, states: @incoming_flow, conn: conn}}
       {:error, _} ->
         {:stop, :normal, state}
