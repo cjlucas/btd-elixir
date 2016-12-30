@@ -47,7 +47,7 @@ defmodule Peer.HandshakeTest do
 
   setup do
     {:ok, listen} = :gen_tcp.listen(0, [:binary, active: false])
-    {:ok, _} = Peer.Handshake.Supervisor.start_link
+    {:ok, _} = Peer.Connection.Supervisor.start_link
     {:ok, _} = MockTorrentStore.start_link([@info_hash])
     {:ok, _} = Peer.Registry.start_link
 
@@ -135,6 +135,7 @@ defmodule Peer.HandshakeTest do
     ])
 
     assert_receive {:EXIT, ^pid, :normal}
+    assert Supervisor.count_children(Peer.Connection.Supervisor).workers == 1
 
     :gen_tcp.close(ssock)
   end
@@ -201,8 +202,10 @@ defmodule Peer.HandshakeTest do
     {:ok, {conn, <<info_hash::bytes-size(20)>>}} = Peer.Socket.recv(conn, 20)
     assert info_hash == @info_hash
 
-    assert_receive {:EXIT, ^pid, :normal}
 
-    #:gen_tcp.close(csock)
+    assert_receive {:EXIT, ^pid, :normal}
+    assert Supervisor.count_children(Peer.Connection.Supervisor).workers == 1
+
+    :gen_tcp.close(csock)
   end
 end
