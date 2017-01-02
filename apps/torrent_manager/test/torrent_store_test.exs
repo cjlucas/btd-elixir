@@ -6,31 +6,18 @@ defmodule Torrent.StoreTest do
 
   setup_all do
     {:ok, files} = File.ls(@fixtures_dir)
-    torrents = files
+    torrent = files
                |> Enum.filter(&(String.ends_with?(&1, ".torrent")))
                |> Enum.map(&(Path.join(@fixtures_dir, &1)))
                |> Enum.map(&File.read!/1)
-               |> Enum.map(&Bento.torrent!/1)
+               |> Enum.map(&Torrent.parse/1)
+               |> List.first
 
-
-    {:ok, %{torrents: torrents}}
+    {:ok, %{torrent: torrent}}
   end
 
-  test "register", ctx do
-    {:ok, _} = Torrent.Store.start_link
-
-    assert Torrent.Store.register(List.first(ctx.torrents), "/") == :ok
-    assert length(Torrent.Store.torrents) == 1
-  end
-
-  test "lookup by info_hash", ctx do
-    {:ok, _} = Torrent.Store.start_link
-
-    :ok = Torrent.Store.register(List.first(ctx.torrents), "/")
-
-    hash = ~h(0403fb4728bd788fbcb67e87d6feb241ef38c75a)
-    {key, val} = Torrent.Store.lookup(:info_hash, hash)
-    assert key == :ok
-    assert val.info_hash == hash
+  test "start_link", %{torrent: torrent} do
+    assert {:ok, pid} = Torrent.Store.start_link(torrent)
+    assert is_pid(pid)
   end
 end

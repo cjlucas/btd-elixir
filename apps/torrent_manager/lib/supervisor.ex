@@ -5,15 +5,11 @@ defmodule Torrent.Supervisor do
     Supervisor.start_link(__MODULE__, :ok, name: __MODULE__)
   end
 
-  def register(torrent) do
-    {:ok, pid} = Torrent.Store.Supervisor.start_child(torrent)
-    :ok = Torrent.Registry.register(torrent.info_hash, pid)
-  end
-
   def init(:ok) do
     children = [
       worker(Torrent.Registry, []),
-      supervisor(Torrent.Store.Supervisor, [])
+      supervisor(Torrent.Store.Supervisor, []),
+      supervisor(Torrent.Manager.Supervisor, [])
     ]
 
     supervise(children, strategy: :one_for_one)
