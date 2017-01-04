@@ -17,8 +17,8 @@ defmodule Torrent.Store do
     GenServer.call(pid, {:incr_download, incr_amnt})
   end
 
-  def peer_id(pid) do
-    GenServer.call(pid, :peer_id)
+  def state(pid) do
+    GenServer.call(pid, :state)
   end
 
   def init(torrent) do
@@ -34,7 +34,7 @@ defmodule Torrent.Store do
     {:reply, :ok, %{state | downloaded: downloaded + amnt}} 
   end
 
-  def handle_call(:peer_id, _from, %{peer_id: peer_id} = state) do
-    {:reply, peer_id, state}
+  def handle_call(:state, _from, state) do
+    {:reply, state, state}
   end
 end

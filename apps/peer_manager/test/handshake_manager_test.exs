@@ -1,53 +1,10 @@
-defmodule MockTorrentStore do
-  use GenServer
-
-  defmodule State do
-    defstruct req2_map: Map.new, hashes: MapSet.new
-  end
-
-  def start_link(hashes) do
-    GenServer.start_link(__MODULE__, hashes, name: Torrent.Store)
-  end
-
-  def lookup(:info_hash, hash), do: Torrent.Store.call({:lookup, :info_hash, hash})
-  def lookup(:skey_hash, hash), do: Torrent.Store.call({:lookup, :skey_hash, hash})
-
-  def init(hashes) do
-    map = for h <- hashes, into: %{}, do: {Peer.HandshakeUtils.req2(h), h}
-    hashes = for h <- hashes, into: MapSet.new, do: h
-    {:ok, %State{req2_map: map, hashes: hashes}}
-  end
-
-  def handle_call({:lookup, :skey_hash, hash}, _from, state) do
-    if Map.has_key?(state.req2_map, hash) do
-      {:reply, {:ok, %Torrent{info_hash: state.req2_map[hash], peer_id: <<0::20*8>>}}, state}
-    else
-      {:reply, {:error, :not_found}, state}
-    end
-  end
-
-  def handle_call({:lookup, :info_hash, hash}, _from, state) do
-    if MapSet.member?(state.hashes, hash) do
-      {:reply, {:ok, %Torrent{info_hash: hash, peer_id: <<0::20*8>>}}, state}
-    else
-      {:reply, {:error, :not_found}, state}
-    end
-  end
-end
-
 defmodule Peer.HandshakeTest do
   use ExUnit.Case
 
-  @info_hash <<
-    0x94, 0x11, 0x2C, 0x62, 0x5A,
-    0x02, 0xBA, 0x80, 0x5A, 0xD0,
-    0xE0, 0x92, 0x87, 0xF4, 0xA7,
-    0xFC, 0xEF, 0xA8, 0x29, 0x1B
-  >>
+  @info_hash Application.fetch_env!(:peer_manager, :test_info_hash)
 
   setup do
     {:ok, listen} = :gen_tcp.listen(0, [:binary, active: false])
-    {:ok, _} = MockTorrentStore.start_link([@info_hash])
 
     on_exit fn -> 
       :gen_tcp.close(listen)
