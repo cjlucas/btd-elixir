@@ -154,7 +154,7 @@ defmodule Peer.HandshakeTest do
     assert pstr == "BitTorrent protocol"
     {:ok, {conn, <<reserved::bytes-size(8)>>}} = Peer.Socket.recv(conn, 8)
     assert reserved == <<0::64>>
-    {:ok, {conn, <<info_hash::bytes-size(20)>>}} = Peer.Socket.recv(conn, 20)
+    {:ok, {_, <<info_hash::bytes-size(20)>>}} = Peer.Socket.recv(conn, 20)
     assert info_hash == @info_hash
 
 
