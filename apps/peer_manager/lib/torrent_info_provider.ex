@@ -19,7 +19,11 @@ defmodule TorrentInfoProvider.TorrentManager do
 end
 
 defmodule TorrentInfoProvider.Random do
-  @info_hash Application.fetch_env!(:peer_manager, :test_info_hash)
+  @info_hash Application.get_env(:peer_manager, :test_info_hash)
+
+  def resolve_info_hash(skey_hash) when is_nil(@info_hash) do
+    raise "test_info_hash is not set"
+  end
 
   def resolve_info_hash(skey_hash) do
     {:ok, @info_hash}
