@@ -11,7 +11,7 @@ defmodule Torrent do
         tor = %Torrent{
           info_hash: calc_info_hash(t),
           piece_length: Map.get(t.info, "piece length"),
-          pieces: Map.get(t.info, "pieces"),
+          pieces: split_pieces(Map.get(t.info, "pieces")),
           private: Map.get(t.info, "private") == 1,
           trackers: [t.announce | Map.get(t, "announce-list") || []],
           files: build_file_list(t.info)
@@ -39,5 +39,11 @@ defmodule Torrent do
     files |> Enum.map(fn f ->
       %Torrent.File{path: f["path"], size: f["length"]}
     end) 
+  end
+
+  defp split_pieces(buf) when is_binary(buf), do: split_pieces(buf, [])
+  defp split_pieces(<<>>, acc), do: Enum.reverse(acc)
+  defp split_pieces(<<piece::bytes-size(20), rest::binary>>, acc) do
+    split_pieces(rest, [piece | acc])
   end
 end
