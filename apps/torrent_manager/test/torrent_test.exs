@@ -10,9 +10,13 @@ defmodule TorrentTest do
       |> File.read!
       |> Torrent.parse
     assert t.info_hash == ~h(0403fb4728bd788fbcb67e87d6feb241ef38c75a)
+    assert t.trackers == [
+      "http://torrent.ubuntu.com:6969/announce",
+      "http://ipv6.torrent.ubuntu.com:6969/announce",
+    ]
     assert t.piece_length == 524288
     assert length(t.files) == 1
-    
+
     fsize = List.first(t.files).size
     assert fsize == 1593835520
 

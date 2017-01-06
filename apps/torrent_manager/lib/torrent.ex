@@ -13,7 +13,7 @@ defmodule Torrent do
           piece_length: Map.get(t.info, "piece length"),
           pieces: split_pieces(Map.get(t.info, "pieces")),
           private: Map.get(t.info, "private") == 1,
-          trackers: [t.announce | Map.get(t, "announce-list") || []],
+          trackers: tracker_list(t.announce, Map.get(t, :"announce-list")),
           files: build_file_list(t.info)
         }
         {:ok, tor}
@@ -39,6 +39,13 @@ defmodule Torrent do
     files |> Enum.map(fn f ->
       %Torrent.File{path: f["path"], size: f["length"]}
     end) 
+  end
+
+  defp tracker_list(announce, announce_list) when is_nil(announce_list) do
+    [announce]
+  end
+  defp tracker_list(_announce, announce_list) do
+    announce_list |> Enum.flat_map(&(&1)) |> Enum.uniq
   end
 
   defp split_pieces(buf) when is_binary(buf), do: split_pieces(buf, [])
