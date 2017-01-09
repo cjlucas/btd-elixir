@@ -42,10 +42,11 @@ defmodule Torrent do
   end
 
   defp tracker_list(announce, announce_list) when is_nil(announce_list) do
-    [announce]
+    [[announce]]
   end
+
   defp tracker_list(_announce, announce_list) do
-    announce_list |> Enum.flat_map(&(&1)) |> Enum.uniq
+    announce_list
   end
 
   defp split_pieces(buf) when is_binary(buf), do: split_pieces(buf, [])
