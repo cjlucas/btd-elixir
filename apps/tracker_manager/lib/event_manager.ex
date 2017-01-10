@@ -5,7 +5,7 @@ defmodule Tracker.EventManager do
   @valid_keys [:received_response]
 
   def start_link do
-    Registry.start_link(:unique, @name)
+    Registry.start_link(:duplicate, @name)
   end
 
   def subscribe(keys) when is_list(keys) do
