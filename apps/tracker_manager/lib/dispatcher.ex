@@ -39,15 +39,15 @@ defmodule Tracker.Dispatcher do
     {:noreply, %{state | queue: :queue.in(req, q)}}
   end
   
-  def handle_info({:DOWN, _ref, :process, _pid, _reason}, %{queue: q} = state) do
+  def handle_info({:DOWN, _ref, :process, _pid, _reason}, %{slots: slots, queue: q} = state) do
     state = cond do
-      state.slots == 0 && !:queue.is_empty(q) ->
+      slots == 0 && !:queue.is_empty(q) ->
         {{:value, req}, q} = :queue.out(q)
         Logger.debug("dequeued entry len(q) = #{:queue.len(q)}")
         do_request(req)
         %{state | queue: q}
       true ->
-        %{state | slots: state.slots+1}
+        %{state | slots: slots+1}
     end
         
     {:noreply, state}

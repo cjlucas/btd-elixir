@@ -146,7 +146,7 @@ defmodule Tracker.Manager do
     entries = Map.update!(entries, info_hash, fn entry -> 
       req = %Tracker.Dispatcher.Request{
         info_hash: info_hash,
-        trackers: entry.trackers,
+        trackers: List.flatten(entry.trackers),
         peer_id: entry.peer_id,
         event: stats.event,
         uploaded: stats.uploaded,
