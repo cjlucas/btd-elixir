@@ -48,7 +48,7 @@ defmodule Tracker do
   end
 
   def handle_http_response(resp = %{"peers" => peers}) when is_list(peers) do
-     peers = Enum.map(peers, fn p -> {p["id"], p["port"]} end)
+     peers = Enum.map(peers, fn p -> {p["ip"], p["port"]} end)
      %{resp | "peers" => peers} |> to_response
   end
 

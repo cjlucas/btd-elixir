@@ -13,6 +13,31 @@ defmodule Tracker.Manager do
   defmodule Entry do
     defstruct trackers: [], peer_id: <<>>, next_announce: nil, timer: nil
 
+    def shuffle_trackers(%{trackers: trackers} = entry) do
+      %{entry | trackers: shuffle_trackers(trackers, [])}
+    end
+    defp shuffle_trackers([], acc), do: acc
+    defp shuffle_trackers([head | rest], acc) do
+      shuffle_trackers(rest, [Enum.shuffle(head) | acc])
+    end
+
+    def reorder_trackers(%{trackers: trackers} = entry, new_head) do
+      %{entry | trackers: reorder_trackers(trackers, new_head, [])}
+    end
+    defp reorder_trackers([], _new_head, acc) do
+      Enum.reverse(acc)
+    end
+    defp reorder_trackers([tier | rest], new_head, acc) do
+      acc = cond do
+        new_head in tier ->
+          l = [new_head | Enum.filter(tier, &(&1 != new_head))]
+          [l | acc]
+        true ->
+          [tier | acc]
+      end
+      reorder_trackers(rest, new_head, acc)
+    end
+
     def cancel_timer(%{timer: timer} = entry) when is_nil(timer), do: entry
     def cancel_timer(%{timer: timer} = entry) do
       {:ok, :cancel} = :timer.cancel(timer)
@@ -58,6 +83,7 @@ defmodule Tracker.Manager do
         peer_id: peer_id,
         next_announce: NaiveDateTime.utc_now
       }
+      |> Entry.shuffle_trackers
 
       {:reply, :ok, %{state | entries: Map.put(entries, info_hash, entry)}}
     end
@@ -95,13 +121,15 @@ defmodule Tracker.Manager do
 
   # EventManager handlers
 
-  def handle_info({:received_response, info_hash, _url, resp}, %{entries: entries} = state) do
+  def handle_info({:received_response, info_hash, url, resp}, %{entries: entries} = state) do
     duration = if resp.interval == 0, do: @default_interval, else: resp.interval
     Logger.info("Got response #{inspect resp}. Queuing request to fire after #{duration} seconds")
 
     if Map.has_key?(entries, info_hash) do
       entries = Map.update!(entries, info_hash, fn entry -> 
-        entry = Entry.cancel_timer(entry)
+        entry = entry
+        |> Entry.cancel_timer
+        |> Entry.reorder_trackers(url)
 
         {:ok, tref} = :timer.send_after(:timer.seconds(duration), {:timer_fired, info_hash})
         time = NaiveDateTime.utc_now |> NaiveDateTime.add(duration)
