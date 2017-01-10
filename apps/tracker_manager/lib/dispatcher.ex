@@ -19,7 +19,7 @@ defmodule Tracker.Dispatcher do
   end
 
   def start_link(num_slots) do
-    GenServer.call(@name, num_slots, name: @name)
+    GenServer.start_link(@name, num_slots, name: @name)
   end
 
   def request(req) do

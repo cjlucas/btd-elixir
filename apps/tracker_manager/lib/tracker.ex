@@ -1,14 +1,16 @@
 defmodule Tracker do
   defmodule Request do
-    # Tracker.Manager is responsible for setting event
     defstruct url: "", info_hash: <<>>, peer_id: <<>>, bytes_uploaded: 0, bytes_downloaded: 0, bytes_left: 0, event: nil, port: 0
   end
 
   defmodule Response do
     defstruct failure_reason: nil, tracker_id: nil, interval: 0, num_seeders: 0, num_leechers: 0, peers: []
   end
+    
+  @valid_events [:started, :stopped, :completed]
 
-  def request(req = %Request{}) do
+  def request(%Request{event: event} = req)
+      when event in @valid_events or is_nil(event) do
     uri = URI.parse(req.url)
     case uri.scheme do
       "http" ->
@@ -31,6 +33,7 @@ defmodule Tracker do
           end
 
         params = Map.merge(URI.decode_query(uri.query || ""), params) 
+        IO.puts URI.encode_query(params)
         with {:ok, resp} = HTTPoison.get(%{uri | query: URI.encode_query(params)}),
              {:ok, data} = Bento.decode(resp.body),
              do: {:ok, handle_http_response(data)}
@@ -39,8 +42,7 @@ defmodule Tracker do
 
   defp parse_binary_peers(buf), do: parse_binary_peers(buf, [])
   defp parse_binary_peers(buf, acc) when byte_size(buf) < 6, do: acc
-  defp parse_binary_peers(buf, acc) do
-     << ip0, ip1, ip2, ip3, port :: big-size(16), rest :: binary >> = buf
+  defp parse_binary_peers(<<ip0, ip1, ip2, ip3, port::big-size(16), rest::binary>>, acc) do
      peer = {Enum.join([ip0, ip1, ip2, ip3], "."), port}
      parse_binary_peers(rest, [peer | acc])
   end

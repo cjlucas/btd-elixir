@@ -17,12 +17,12 @@ defmodule Tracker.EventManager do
   end
 
   def received_response(info_hash, url, resp) do
-    notify(:received_response, {info_hash, url, resp})
+    notify({:received_response, info_hash, url, resp})
   end
 
-  defp notify(key, val) do
-    Registry.dispatch(@name, key, fn entries ->
-      for {pid, _} <- entries, do: send(pid, {key, val})
+  defp notify(msg) do
+    Registry.dispatch(@name, elem(msg, 0), fn entries ->
+      for {pid, _} <- entries, do: send(pid, msg)
     end)
   end
 end

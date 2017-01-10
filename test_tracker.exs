@@ -21,8 +21,8 @@ defmodule Doit do
 
   def request do
 		info_hash = ~h(0403fb4728bd788fbcb67e87d6feb241ef38c75a)
-  	Tracker.Manager.register(info_hash, :crypto.strong_rand_bytes(20), ["http://torrent.ubuntu.com:6969/announce"])
-		Tracker.Manager.request(info_hash)
+  	Tracker.Manager.register(info_hash, :crypto.strong_rand_bytes(20), [["http://torrent.ubuntu.com:6969/announce"]])
+		Tracker.Manager.request(info_hash, :started, 1, 2, 3)
   end
 end
 

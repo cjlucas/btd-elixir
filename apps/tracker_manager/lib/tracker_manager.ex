@@ -7,7 +7,8 @@ defmodule TrackerManager do
     children = [
       supervisor(Tracker.EventManager, []),
       supervisor(Task.Supervisor, [[name: Tracker.Worker.Supervisor]]),
-      worker(Tracker.Manager, [5])
+      worker(Tracker.Dispatcher, [5]),
+      worker(Tracker.Manager, [])
     ]
 
     Supervisor.start_link(children, strategy: :one_for_one)
