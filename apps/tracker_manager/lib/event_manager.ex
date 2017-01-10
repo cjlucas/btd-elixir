@@ -1,28 +1,28 @@
 defmodule Tracker.EventManager do
-  use Supervisor
+
+  @name __MODULE__
+
+  @valid_keys [:received_response]
 
   def start_link do
-    Supervisor.start_link(__MODULE__, :ok, name: __MODULE__)
+    Registry.start_link(:unique, @name)
   end
 
-  def add_handler(handler, opts) do
-    Supervisor.start_child(__MODULE__, [handler, opts])
+  def subscribe(keys) when is_list(keys) do
+    for key <- keys, do: subscribe(key)
   end
 
-  def received_response(resp) do
-    notify({:received_response, resp})
+  def subscribe(key) when key in @valid_keys do
+    Registry.register(@name, key, [])
   end
 
-  def init(:ok) do
-    child = worker(GenServer, [], restart: :temporary)
-    supervise([child], strategy: :simple_one_for_one)
+  def received_response(info_hash, url, resp) do
+    notify(:received_response, {info_hash, url, resp})
   end
 
-  defp notify(event) do
-    for {_, pid, _, _} <- Supervisor.which_children(__MODULE__) do
-      GenServer.cast(pid, event)
-    end
-
-    :ok
+  defp notify(key, val) do
+    Registry.dispatch(@name, key, fn entries ->
+      for {pid, _} <- entries, do: send(pid, {key, val})
+    end)
   end
 end

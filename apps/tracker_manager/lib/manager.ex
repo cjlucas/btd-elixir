@@ -15,7 +15,7 @@ defmodule Tracker.Manager do
   end
   
   defmodule State do
-    defstruct slots: 0, entries: %{}, queue: :queue.new()
+    defstruct slots: 0, entries: %{}
   end
 
   def start_link(slots) do
@@ -27,7 +27,7 @@ defmodule Tracker.Manager do
   end
 
   def deregister(info_hash) do
-    GenServer.call(@name, {:remove_tracker, info_hash})
+    GenServer.call(@name, {:deregister, info_hash})
   end
 
   def request(info_hash) do
@@ -38,11 +38,8 @@ defmodule Tracker.Manager do
     GenServer.cast(@name, {:request, info_hash, event, uploaded, downloaded, left})
   end
 
-  defp process_response(info_hash, resp) do
-    GenServer.call(@name, {:process_response, info_hash, resp})
-  end
-
   def init([slots]) do
+    Tracker.EventManager.subscribe(:received_response)
     {:ok, %State{slots: slots}}
   end
 
@@ -61,28 +58,16 @@ defmodule Tracker.Manager do
   end
 
   def handle_call({:remove_tracker, info_hash}, _from, %{entries: entries} = state) do
-    {:reply, :ok, %{state | entries: Map.delete(entries, info_hash)}}
-  end
-
-  def handle_call({:process_response, info_hash, resp}, _from, %{entries: entries} = state) do
-    duration = if resp.interval == 0, do: @default_interval, else: resp.interval
-    Logger.info("Got response #{inspect resp}. Queuing request to fire after #{duration} seconds")
-
-    if Map.has_key?(entries, info_hash) do
-      entries = Map.update!(entries, info_hash, fn %{timer: timer} = entry -> 
+    ret = case Map.get(entries, info_hash) do
+      %{timer: timer} ->
         if !is_nil(timer) do
           {:ok, :cancel} = :timer.cancel(timer)
         end
-
-        {:ok, tref} = :timer.send_after(:timer.seconds(duration), {:timer_fired, info_hash})
-        time = NaiveDateTime.utc_now |> NaiveDateTime.add(duration)
-        %{entry | timer: tref, next_announce: time}
-      end)
-
-      {:reply, :ok, %{state | entries: entries}}
-    else
-      {:reply, :ok, state}
+        :ok
+      nil ->
+        {:error, :not_found}
     end
+    {:reply, ret, %{state | entries: Map.delete(entries, info_hash)}}
   end
 
   def handle_cast({:request, info_hash}, state) do
@@ -104,21 +89,27 @@ defmodule Tracker.Manager do
     handle_cast({:request, info_hash}, state)
   end
 
-  def handle_info({:DOWN, _ref, :process, _pid, _reason}, %{entries: entries, queue: q} = state) do
-    state = cond do
-      state.slots == 0 && !:queue.is_empty(q) ->
-        {{:value, {info_hash, stats}}, q} = :queue.out(q)
-        Logger.debug("dequeued entry len(q) = #{:queue.len(q)}")
-        # Check if torrent was deregistered while in queue
-        if Map.has_key?(entries, info_hash) do
-          dispatch(info_hash, Map.get(entries, info_hash), stats)
+  # EventManager handlers
+
+  def handle_info({:received_response, info_hash, url, resp}, %{entries: entries} = state) do
+    duration = if resp.interval == 0, do: @default_interval, else: resp.interval
+    Logger.info("Got response #{inspect resp}. Queuing request to fire after #{duration} seconds")
+
+    if Map.has_key?(entries, info_hash) do
+      entries = Map.update!(entries, info_hash, fn %{timer: timer} = entry -> 
+        if !is_nil(timer) do
+          {:ok, :cancel} = :timer.cancel(timer)
         end
-        %{state | queue: q}
-      true ->
-        %{state | slots: state.slots+1}
+
+        {:ok, tref} = :timer.send_after(:timer.seconds(duration), {:timer_fired, info_hash})
+        time = NaiveDateTime.utc_now |> NaiveDateTime.add(duration)
+        %{entry | timer: tref, next_announce: time}
+      end)
+
+      {:reply, :ok, %{state | entries: entries}}
+    else
+      {:reply, :ok, state}
     end
-        
-    {:noreply, state}
   end
 
   defp handle_request(info_hash, stats, %{slots: slots, entries: entries} = state) when slots > 0 do
@@ -139,28 +130,17 @@ defmodule Tracker.Manager do
     {:noreply, %{state | entries: entries, queue: :queue.in({info_hash, stats}, q)}}
   end
 
-  defp dispatch(info_hash,  %Entry{trackers: trackers, peer_id: peer_id}, stats) do
-    url = trackers |> List.first
-    req = %Tracker.Request{
-      url: url,
+  def dispatch(info_hash, entry, stats) do
+    req = %Tracker.Dispatcher.Request{
       info_hash: info_hash,
-      peer_id: peer_id,
-      bytes_uploaded: stats.uploaded,
-      bytes_downloaded: stats.downloaded,
-      bytes_left: stats.left,
-      event: stats.event
+      trackers: entry.trackers,
+      peer_id: entry.peer_id,
+      event: stats.event,
+      uploaded: stats.uploaded,
+      downloaded: stats.downloaded,
+      left: stats.left
     }
 
-    {:ok, pid} = Task.Supervisor.start_child(Tracker.Worker.Supervisor, fn ->
-      Logger.info("Sending request: #{inspect req}")
-      {:ok, resp} = Tracker.request(req)
-      Tracker.EventManager.received_response(resp)
-      process_response(info_hash, resp)
-    end)
-
-    Process.monitor(pid)
-  end
-  defp dispatch(_id, nil, _stats) do
-    raise "dispatch/3 called on missing entry"
+    Tracker.Dispatcher.request(req)
   end
 end
