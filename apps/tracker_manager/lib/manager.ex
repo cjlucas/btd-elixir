@@ -16,7 +16,7 @@ defmodule Tracker.Manager do
     def shuffle_trackers(%{trackers: trackers} = entry) do
       %{entry | trackers: shuffle_trackers(trackers, [])}
     end
-    defp shuffle_trackers([], acc), do: acc
+    defp shuffle_trackers([], acc), do: Enum.reverse(acc)
     defp shuffle_trackers([head | rest], acc) do
       shuffle_trackers(rest, [Enum.shuffle(head) | acc])
     end
