@@ -123,7 +123,7 @@ defmodule Tracker.Manager do
 
   def handle_info({:received_response, info_hash, url, resp}, %{entries: entries} = state) do
     duration = if resp.interval == 0, do: @default_interval, else: resp.interval
-    Logger.info("Got response #{inspect resp}. Queuing request to fire after #{duration} seconds")
+    Logger.debug("Got response #{inspect resp}. Queuing request to fire after #{duration} seconds")
 
     if Map.has_key?(entries, info_hash) do
       entries = Map.update!(entries, info_hash, fn entry -> 
