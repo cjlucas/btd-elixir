@@ -5,15 +5,16 @@ defmodule TrackerManager do
     import Supervisor.Spec, warn: false
 
     children = [
-      worker(Tracker.Manager, [5]),
       supervisor(Tracker.EventManager, []),
-      supervisor(Task.Supervisor, [[name: Tracker.Worker.Supervisor]])
+      supervisor(Task.Supervisor, [[name: Tracker.Worker.Supervisor]]),
+      worker(Tracker.Dispatcher, [5]),
+      worker(Tracker.Manager, [])
     ]
 
     Supervisor.start_link(children, strategy: :one_for_one)
   end
 
-  def add_event_handler(handler, opts) do
-    Tracker.EventManager.add_handler(handler, opts)
+  def subscribe(event) do
+    Tracker.EventManager.subscribe(event)
   end
 end

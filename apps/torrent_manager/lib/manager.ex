@@ -1,5 +1,4 @@
 defmodule Torrent.Manager do
-
   defmodule State do
     defstruct info_hash: <<>>
   end

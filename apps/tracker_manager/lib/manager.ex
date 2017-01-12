@@ -3,89 +3,161 @@ defmodule Tracker.Manager do
   require Logger
 
   @name __MODULE__
+
+  @default_interval 1800
+
+  defmodule Stats do
+    defstruct event: nil, uploaded: 0, downloaded: 0, left: 0
+  end
+
+  defmodule Entry do
+    defstruct trackers: [], peer_id: <<>>, next_announce: nil, timer: nil
+
+    def shuffle_trackers(%{trackers: trackers} = entry) do
+      %{entry | trackers: shuffle_trackers(trackers, [])}
+    end
+    defp shuffle_trackers([], acc), do: Enum.reverse(acc)
+    defp shuffle_trackers([head | rest], acc) do
+      shuffle_trackers(rest, [Enum.shuffle(head) | acc])
+    end
+
+    def reorder_trackers(%{trackers: trackers} = entry, new_head) do
+      %{entry | trackers: reorder_trackers(trackers, new_head, [])}
+    end
+    defp reorder_trackers([], _new_head, acc) do
+      Enum.reverse(acc)
+    end
+    defp reorder_trackers([tier | rest], new_head, acc) do
+      acc = cond do
+        new_head in tier ->
+          l = [new_head | Enum.filter(tier, &(&1 != new_head))]
+          [l | acc]
+        true ->
+          [tier | acc]
+      end
+      reorder_trackers(rest, new_head, acc)
+    end
+
+    def cancel_timer(%{timer: timer} = entry) when is_nil(timer), do: entry
+    def cancel_timer(%{timer: timer} = entry) do
+      {:ok, :cancel} = :timer.cancel(timer)
+      %{entry | timer: nil}
+    end
+  end
   
   defmodule State do
-    defstruct slots: 0, trackers: %{}, queue: :queue.new(), timers: []
+    defstruct entries: %{}
   end
 
-  def start_link(slots) do
-    GenServer.start_link(@name, [slots], name: @name)
+  def start_link do
+    GenServer.start_link(@name, [], name: @name)
   end
 
-  def add(url, info_hash, peer_id) do
-    GenServer.call(@name, {:add_tracker, url, info_hash, peer_id})
+  def register(info_hash, peer_id, trackers) do
+    GenServer.call(@name, {:register, info_hash, peer_id, trackers})
   end
 
-  def remove(url) do
-    GenServer.call(@name, {:remove_tracker, url})
+  def deregister(info_hash) do
+    GenServer.call(@name, {:deregister, info_hash})
   end
 
-  def request(url) do
-    GenServer.cast(@name, {:request, url})
+  def request(info_hash) do
+    GenServer.cast(@name, {:request, info_hash})
   end
 
-  defp register_timer(url, interval) do
-    GenServer.call(@name, {:register_timer, url, interval})
+  def request(info_hash, event, uploaded, downloaded, left) do
+    GenServer.cast(@name, {:request, info_hash, event, uploaded, downloaded, left})
   end
 
-  def init([slots]) do
-    {:ok, %State{slots: slots}}
+  def init([]) do
+    Tracker.EventManager.subscribe(:received_response)
+    {:ok, %State{}}
   end
 
-  def handle_call({:add_tracker, url, info_hash, peer_id}, _from, state) do
-    new_state = update_in(state.trackers, &(Map.put(&1, url, {info_hash, peer_id})))
-    {:reply, :ok, new_state}
-  end
+  def handle_call({:register, info_hash, peer_id, trackers}, _from, %{entries: entries} = state) do
+    if Map.has_key?(entries, info_hash) do
+      {:reply, {:error, :already_exists}, state}
+    else
+      entry = %Entry{
+        trackers: trackers,
+        peer_id: peer_id,
+        next_announce: NaiveDateTime.utc_now
+      }
+      |> Entry.shuffle_trackers
 
-  def handle_call({:remove_tracker, url}, _from, state) do
-    new_state = %{state | trackers: Map.delete(state.trackers, url)}
-    {:reply, :ok, new_state}
-  end
-
-  def handle_call({:register_timer, url, duration}, _from, state = %State{timers: timers}) do
-    tref = :timer.send_after(:timer.seconds(duration), {:timer_fired, url})
-    {:reply, :ok, %{state | timers: [tref | timers]}}
-  end
-  
-  def handle_cast({:request, url}, state = %State{slots: slots}) when slots > 0 do
-    dispatch(url, state.trackers[url])
-    {:noreply, %{state | slots: slots-1}}
-  end
-
-  def handle_cast({:request, url}, state = %State{slots: slots, queue: q}) when slots == 0 do
-    {:noreply, %{state | queue: :queue.in(url, q)}}
-  end
-
-  def handle_info({:timer_fired, url}, state) do
-    Logger.info("Timer fired for url #{url}")
-    request(url)
-    {:noreply, state}
-  end
-
-  def handle_info({:DOWN, _ref, :process, _pid, _reason}, state) do
-    state = cond do
-      state.slots == 0 && !:queue.is_empty(state.queue) ->
-        {{:value, url}, q} = :queue.out(state.queue)
-        dispatch(url, state.trackers[url])
-        %{state | queue: q}
-      true ->
-        %{state | slots: state.slots+1}
+      {:reply, :ok, %{state | entries: Map.put(entries, info_hash, entry)}}
     end
-        
-    {:noreply, state}
   end
 
-  defp dispatch(url, {info_hash, peer_id}) do
-    req = %Tracker.Request{url: url, info_hash: info_hash, peer_id: peer_id}
-    {:ok, pid} = Task.Supervisor.start_child(Tracker.Worker.Supervisor, fn ->
-      Logger.info("Sending request: #{inspect req}")
-      {:ok, resp} = Tracker.request(req)
-      Tracker.EventManager.received_response(resp)
-      Logger.info("Got response #{inspect resp}. Queuing request to fire after #{resp.interval} seconds")
+  def handle_call({:deregister, info_hash}, _from, %{entries: entries} = state) do
+    ret = cond do
+      Map.has_key?(entries, info_hash) ->
+        Map.get(entries, info_hash) |> Entry.cancel_timer
+        :ok
+      true ->
+        {:error, :not_found}
+    end
+    {:reply, ret, %{state | entries: Map.delete(entries, info_hash)}}
+  end
 
-      if resp.interval > 0, do: register_timer(url, resp.interval)
+  def handle_cast({:request, info_hash}, state) do
+    handle_request(info_hash, %Stats{}, state)
+  end
+
+  def handle_cast({:request, info_hash, event, uploaded, downloaded, left}, state) do
+    stats = %Stats{event: event, uploaded: uploaded, downloaded: downloaded, left: left}
+    handle_request(info_hash, stats, state)
+  end
+
+  def handle_info({:timer_fired, info_hash}, %{entries: entries} = state) do
+    Logger.info("Timer fired for info_hash #{inspect info_hash}")
+
+    if !Map.has_key?(entries, info_hash) do
+      raise "timer fired on deregistered torrent"
+    end
+
+    handle_cast({:request, info_hash}, state)
+  end
+
+  # EventManager handlers
+
+  def handle_info({:received_response, info_hash, url, resp}, %{entries: entries} = state) do
+    duration = if resp.interval == 0, do: @default_interval, else: resp.interval
+    Logger.debug("Got response #{inspect resp}. Queuing request to fire after #{duration} seconds")
+
+    if Map.has_key?(entries, info_hash) do
+      entries = Map.update!(entries, info_hash, fn entry -> 
+        entry = entry
+        |> Entry.cancel_timer
+        |> Entry.reorder_trackers(url)
+
+        {:ok, tref} = :timer.send_after(:timer.seconds(duration), {:timer_fired, info_hash})
+        time = NaiveDateTime.utc_now |> NaiveDateTime.add(duration)
+        %{entry | timer: tref, next_announce: time}
+      end)
+
+      {:noreply, %{state | entries: entries}}
+    else
+      {:noreply, state}
+    end
+  end
+
+  defp handle_request(info_hash, stats, %{entries: entries} = state) do
+    entries = Map.update!(entries, info_hash, fn entry -> 
+      req = %Tracker.Dispatcher.Request{
+        info_hash: info_hash,
+        trackers: List.flatten(entry.trackers),
+        peer_id: entry.peer_id,
+        event: stats.event,
+        uploaded: stats.uploaded,
+        downloaded: stats.downloaded,
+        left: stats.left
+      }
+      Tracker.Dispatcher.request(req)
+
+      entry = Entry.cancel_timer(entry)
+      %{entry | next_announce: NaiveDateTime.utc_now}
     end)
-
-    Process.monitor(pid)
+    {:noreply, %{state | entries: entries}}
   end
 end
