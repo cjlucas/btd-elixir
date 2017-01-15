@@ -1,5 +1,3 @@
-# TODO: rename this file
-
 defmodule Torrent.FileHandler do
   use GenServer
   require Logger
