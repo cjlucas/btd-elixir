@@ -33,10 +33,14 @@ defmodule Torrent.Registry do
     GenServer.call(__MODULE__, {:lookup, :skey_hash, hash}) 
   end
 
+  def init(:ok) do
+    {:ok, %State{}}
+  end
+
   def handle_call(:size, _from, %{info_hash_map: map} = state) do
     {:reply, Map.size(map), state}
   end
-  
+
   def handle_call(:reset, _from, _state) do
     [Torrent.Store.Supervisor, Torrent.Manager.Supervisor]
     |> Enum.each(fn sup ->
