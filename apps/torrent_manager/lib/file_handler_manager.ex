@@ -52,11 +52,7 @@ defmodule Torrent.FileHandler.Manager do
   defp lookup(fpath) do
     case Registry.lookup(Torrent.FileHandler.Registry, fpath) do
       [{pid, _}] ->
-        if Process.alive?(pid) do
-          {:ok, pid}
-        else
-          open(fpath)
-        end
+        {:ok, pid}
       [] ->
         open(fpath)
     end
