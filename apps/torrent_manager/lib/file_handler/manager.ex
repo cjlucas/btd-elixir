@@ -25,7 +25,7 @@ defmodule Torrent.FileHandler.Manager do
 
   def handle_call({:write, fpath, loc, data}, from, state) do
     spawn_link(fn ->
-      GenServer.reply(from, call(fpath, :write, [loc, data]))
+      GenServer.reply(from, call_handler(fpath, :write, [loc, data]))
     end)
 
     {:noreply, state}
@@ -33,7 +33,7 @@ defmodule Torrent.FileHandler.Manager do
   
   def handle_call({:read, fpath, loc, num_bytes}, from, state) do
     spawn_link(fn ->
-      GenServer.reply(from, call(fpath, :read, [loc, num_bytes]))
+      GenServer.reply(from, call_handler(fpath, :read, [loc, num_bytes]))
     end)
 
     {:noreply, state}
@@ -52,11 +52,7 @@ defmodule Torrent.FileHandler.Manager do
   defp lookup(fpath) do
     case Registry.lookup(Torrent.FileHandler.Registry, fpath) do
       [{pid, _}] ->
-        if Process.alive?(pid) do
-          {:ok, pid}
-        else
-          open(fpath)
-        end
+        {:ok, pid}
       [] ->
         open(fpath)
     end
@@ -66,14 +62,14 @@ defmodule Torrent.FileHandler.Manager do
     Torrent.FileHandler.Supervisor.start_child(fpath)
   end
 
-  defp call(fpath, fun, args) do
+  defp call_handler(fpath, fun, args) do
     case lookup(fpath) do
       {:ok, pid} ->
         try do
           apply(Torrent.FileHandler, fun, [pid | args])
         catch
           :exit, _ ->
-            call(fpath, fun, args)
+            call_handler(fpath, fun, args)
         end
       {:error, reason} ->
         {:error, reason}
