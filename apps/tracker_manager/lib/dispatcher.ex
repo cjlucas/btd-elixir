@@ -54,7 +54,7 @@ defmodule Tracker.Dispatcher do
   end
 
   def do_request(req) do
-    url = req.trackers |> List.first |> List.first
+    url = req.trackers |> List.first
     req = %Tracker.Request{
       url: url,
       info_hash: req.info_hash,
