@@ -109,6 +109,11 @@ defmodule Peer.Handshake do
   end
   
   def handle_info(:timeout, %InitialState{host: host, port: port, info_hash: hash} = state) do
+    host = host
+           |> String.split(".")
+           |> Enum.map(&String.to_integer/1)
+           |> List.to_tuple
+
     case :gen_tcp.connect(host, port, [:binary, active: true]) do
       {:ok, sock} ->
         conn = %Peer.Socket{sock: sock}
@@ -275,6 +280,7 @@ defmodule Peer.Handshake do
     if iolist_size(buf) >= byte_size(@crypto_provide) do
       << cs_enc::bytes-size(4), rest::binary>> = iolist_to_binary(buf)
       {conn, cs} = Peer.Socket.decrypt(conn, cs_enc)
+      Logger.debug("crypto_select: #{inspect cs}")
       {:next_state, %{info | conn: conn, crypto_select: cs, buffer: [rest]}}
     else
       :no_change
@@ -403,11 +409,7 @@ defmodule Peer.Handshake do
     if iolist_size(buf) >= 8 do
       <<reserved_enc::bytes-size(8), rest::binary>> = iolist_to_binary(buf)
       {conn, reserved} = Peer.Socket.decrypt(conn, reserved_enc)
-      if reserved == <<0::64>> do
-        {:next_state, %{info | conn: conn, buffer: [rest]}}
-      else
-        {:error, :bad_reserved}
-      end
+      {:next_state, %{info | conn: conn, buffer: [rest]}}
     else
       :no_change
     end
