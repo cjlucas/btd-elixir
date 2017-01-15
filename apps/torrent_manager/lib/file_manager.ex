@@ -15,6 +15,7 @@ defmodule Torrent.FileHandler do
   def init({fpath, timeout}) do
     case :file.open(fpath, [:read, :write, :binary, :raw]) do
       {:ok, file} ->
+        Registry.register(Torrent.FileHandler.Registry, fpath, [])
         {:ok, %State{file: file, timeout: timeout}, timeout}
       {:error, reason} ->
         {:stop, reason}
@@ -26,7 +27,7 @@ defmodule Torrent.FileHandler do
   end
 
   def write(pid, loc, data) do
-    GenServer.cast(pid, {:write, loc, data})
+    GenServer.call(pid, {:write, loc, data})
   end
 
   def handle_call({:read, loc, num_bytes}, _from, %{file: f, timeout: timeout} = state) do
@@ -34,9 +35,9 @@ defmodule Torrent.FileHandler do
     {:reply, reply, state, timeout}
   end
 
-  def handle_cast({:write, loc, data}, %{file: f, timeout: timeout} = state) do
-    :ok = :file.pwrite(f, loc, data)
-    {:noreply, state, timeout}
+  def handle_call({:write, loc, data}, _from, %{file: f, timeout: timeout} = state) do
+    reply = :file.pwrite(f, loc, data)
+    {:reply, reply, state, timeout}
   end
 
   def handle_info(:timeout, state) do
