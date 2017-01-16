@@ -6,7 +6,7 @@ defmodule Peer.Connection.Supervisor do
   end
 
   def start_child(info_hash, sock) do
-    Supervisor.start_child(__MODULE__, [<<>>, sock])
+    Supervisor.start_child(__MODULE__, [info_hash, sock])
   end
 
   def init(:ok) do
