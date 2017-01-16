@@ -32,6 +32,9 @@ defmodule Peer.Connection do
   end
 
   def init({info_hash, sock}) do
+    {:ok, {host, port}} = :inet.peername(sock.sock)
+    host = host |> Tuple.to_list |> Enum.join(".")
+    Peer.Registry.register(info_hash, {host, port})
     Peer.EventManager.received_connection(info_hash, self())
     {:ok, %State{info_hash: info_hash, sock: sock}} 
   end

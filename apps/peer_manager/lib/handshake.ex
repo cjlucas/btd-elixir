@@ -143,11 +143,10 @@ defmodule Peer.Handshake do
       :ok <- :inet.setopts(conn.sock, [active: true]) do
         send(pid, {:tcp, conn.sock, iolist_to_binary(buf)})
         :gen_tcp.controlling_process(conn.sock, pid)
-        Peer.Registry.register(h, id, pid)
         {:stop, :normal, state}
     else
       {:error, reason} ->
-        Logger.debug("Error occured while transferring socket: #{reason}")
+        Logger.debug("Error occured while transferring socket: #{inspect reason}")
         {:stop, :kill, state}
     end
   end
