@@ -28,6 +28,7 @@ defmodule Peer.HandshakeTest do
     end
   end
 
+  @tag :skip
   test "outgoing connection", ctx do
     {:ok, port} = :inet.port(ctx.listen)
     {:ok, pid} = Peer.Handshake.start_link({127,0,0,1}, port, @info_hash)
