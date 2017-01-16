@@ -1,11 +1,12 @@
 defmodule Peer.Connection do
   use GenServer
   require Logger
-  alias Bittorrent.Message.{Bitfield,Interested,Request,Unchoke}
+  alias Bittorrent.Message.{Bitfield, Choke, Unchoke, Interested, NotInterested}
 
   defmodule State do
-    defstruct sock: nil,
-      bitfield: <<>>,
+    defstruct info_hash: <<>>,
+      sock: nil,
+      bitfield: nil,
       choked: true,
       interested: false,
       in_bytes: 0,
@@ -21,22 +22,28 @@ defmodule Peer.Connection do
     GenServer.cast(pid, {:send_msg, msg})
   end
 
+  def has_piece?(pid, idx) do
+    GenServer.call(pid, {:has_piece?, idx})
+  end
+
+  # TODO: Deprecate me. Close connection in terminate instead and use GenServer.stop instead
   def close(pid) do
     GenServer.call(pid, :close)
   end
 
   def init({info_hash, sock}) do
     Peer.EventManager.received_connection(info_hash, self())
-    {:ok, %State{sock: sock}} 
+    {:ok, %State{info_hash: info_hash, sock: sock}} 
   end
 
-  def handle_info({:tcp, _sock, data}, %{sock: sock, buffer: buf} = state) do
+  def handle_info({:tcp, _sock, data}, %{info_hash: hash, sock: sock, buffer: buf} = state) do
     {sock, data} = Peer.Socket.decrypt(sock, data)
     buf = buf <> data
 
     case process_buffer(buf) do
       {:ok, msg, rest} ->
         Logger.debug("Received message: #{inspect msg}")
+        Peer.EventManager.received_message(hash, {self(), msg})
         handle_msg(msg, %{state | sock: sock, buffer: rest})
       {:error, _} ->
         {:noreply, %{state | sock: sock, buffer: buf}}
@@ -49,6 +56,13 @@ defmodule Peer.Connection do
 
   def handle_call(:close, _from, %{sock: sock} = state) do
     {:reply, :gen_tcp.close(sock.sock), state}
+  end
+  
+  def handle_call({:has_piece?, idx}, _from, %{bitfield: bits} = state) when is_nil(bits) do
+    {:reply, false, state}
+  end
+  def handle_call({:has_piece?, idx}, _from, %{bitfield: bits} = state) do
+    {:reply, BitSet.get(bits, idx) == 1, state}
   end
 
   def handle_cast({:send_msg, msg}, %{sock: sock} = state) do
@@ -78,21 +92,26 @@ defmodule Peer.Connection do
   end
 
   defp handle_msg(%Bitfield{bitfield: bits}, state) do
-    IO.puts(byte_size(bits))
-
-    {:noreply, state} = handle_cast({:send_msg, %Bitfield{bitfield: <<0::3040>>}}, state)
-    {:noreply, state} = handle_cast({:send_msg, %Interested{}}, state)
-
-    {:noreply, state}
+    {:noreply, %{state | bitfield: BitSet.from_binary(bits)}}
+  end
+  
+  defp handle_msg(%Choke{}, state) do
+    {:noreply, %{state | choked: true}}
   end
 
   defp handle_msg(%Unchoke{}, state) do
-    {:noreply, state} = handle_cast({:send_msg, %Request{index: 0, begin: 0, length: 16384}}, state)
-    {:noreply, state}
+    {:noreply, %{state | choked: false}}
+  end
+  
+  defp handle_msg(%Interested{}, state) do
+    {:noreply, %{state | interested: true}}
+  end
+  
+  defp handle_msg(%NotInterested{}, state) do
+    {:noreply, %{state | interested: false}}
   end
 
-  defp handle_msg(msg, state) do
-    Logger.debug("received unhandled msg #{inspect msg}") 
+  defp handle_msg(_msg, state) do
     {:noreply, state}
   end
 end
