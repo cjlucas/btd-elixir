@@ -1,5 +1,7 @@
 defmodule Peer.Manager do
   use GenServer
+  require Logger
+  alias Bittorrent.Message.{Bitfield, Unchoke, Request, Interested}
 
   @name __MODULE__
 
@@ -13,15 +15,29 @@ defmodule Peer.Manager do
 
   def init(info_hash) do
     Registry.register(Peer.Manager.Registry, info_hash, [])
-    #Peer.EventManager.register(info_hash)
+    Peer.EventManager.register(info_hash)
     {:ok, %State{}}
   end
 
   def handle_info({:received_connection, conn}, state) do
-    IO.puts("Received new connection")
     {:noreply, state}
   end
 
+  def handle_info({:received_message, conn, %Bitfield{}}, state) do
+    Peer.Connection.send_msg(conn, %Interested{})
+    {:noreply, state}
+  end
+  
+  def handle_info({:received_message, conn, %Unchoke{}}, state) do
+    Peer.Connection.send_msg(conn, %Request{index: 0, begin: 0, length: 16384})
+    {:noreply, state}
+  end
+
+  def handle_info({:received_message, _conn, msg}, state) do
+    Logger.debug("Received unhandled message: #{inspect msg}")
+    {:noreply, state}
+  end
+  
   def handle_info(:timeout, state) do
     {:stop, :normal, state}
   end
