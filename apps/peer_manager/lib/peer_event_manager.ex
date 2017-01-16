@@ -7,7 +7,7 @@ defmodule Peer.EventManager do
   end
 
   def register(info_hash) do
-    Registry.register(@name, info_hash)
+  	Registry.register(@name, info_hash, [])
   end
   
   def deregister(info_hash) do
