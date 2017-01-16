@@ -8,9 +8,12 @@ IO.puts("num pieces: #{length(torrent.pieces)}")
 
 {:ok, _} = Torrent.Registry.register(torrent)
 
+Peer.Manager.Supervisor.start_child(info_hash)
+
 TrackerManager.subscribe(:received_response)
 :ok = Tracker.Manager.register(info_hash, info_hash, [[url]])
 :ok = Tracker.Manager.request(info_hash, :started, 0, 0, 0)
+
 
 receive do
   {:received_response, info_hash, url, resp} ->
