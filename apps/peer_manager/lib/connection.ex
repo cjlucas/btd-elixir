@@ -13,8 +13,8 @@ defmodule Peer.Connection do
       buffer: <<>>
   end
 
-  def start_link(sock) do
-    GenServer.start_link(__MODULE__, sock)
+  def start_link(info_hash, sock) do
+    GenServer.start_link(__MODULE__, {info_hash, sock})
   end
 
   def send_msg(pid, msg) do
@@ -25,7 +25,8 @@ defmodule Peer.Connection do
     GenServer.call(pid, :close)
   end
 
-  def init(sock) do
+  def init({info_hash, sock}) do
+    Peer.EventManager.received_connection(info_hash, self())
     {:ok, %State{sock: sock}} 
   end
 

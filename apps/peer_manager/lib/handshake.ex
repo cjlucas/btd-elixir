@@ -139,7 +139,7 @@ defmodule Peer.Handshake do
   defp dispatch_handler(%{conn: conn, info_hash: h, peer_id: id, buffer: buf, states: []} = state) do
     Logger.debug("All done")
     with :ok <- :inet.setopts(conn.sock, [active: false]),
-      {:ok, pid} <- Peer.Connection.Supervisor.start_child(conn),
+      {:ok, pid} <- Peer.Connection.Supervisor.start_child(h, conn),
       :ok <- :inet.setopts(conn.sock, [active: true]) do
         send(pid, {:tcp, conn.sock, iolist_to_binary(buf)})
         :gen_tcp.controlling_process(conn.sock, pid)
