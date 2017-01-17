@@ -26,11 +26,6 @@ defmodule Peer.Connection do
     GenServer.call(pid, {:has_piece?, idx})
   end
 
-  # TODO: Deprecate me. Close connection in terminate instead and use GenServer.stop instead
-  def close(pid) do
-    GenServer.call(pid, :close)
-  end
-
   def init({info_hash, sock}) do
     {:ok, {host, port}} = :inet.peername(sock.sock)
     host = host |> Tuple.to_list |> Enum.join(".")
@@ -57,10 +52,6 @@ defmodule Peer.Connection do
     {:stop, :normal, state}
   end
 
-  def handle_call(:close, _from, %{sock: sock} = state) do
-    {:reply, :gen_tcp.close(sock.sock), state}
-  end
-  
   def handle_call({:has_piece?, idx}, _from, %{bitfield: bits} = state) when is_nil(bits) do
     {:reply, false, state}
   end
@@ -78,6 +69,10 @@ defmodule Peer.Connection do
         Logger.debug("Send failed with reason: #{reason}")
         {:stop, :normal, state}
     end
+  end
+
+  def terminate(_reason, %{sock: sock}) do
+    Peer.Socket.close(sock)  
   end
 
   defp process_buffer(<<0::32, rest::binary>>), do: process_buffer(rest)

@@ -30,4 +30,8 @@ defmodule Peer.Socket do
     {stream, data} = :crypto.stream_decrypt(stream, data)
     {%{conn | in_stream: stream}, data}
   end
+
+  def close(%__MODULE__{sock: sock}) do
+    :gen_tcp.close(sock)
+  end
 end
