@@ -1,6 +1,11 @@
 defmodule FileStream.Manager do
   use GenServer
 
+  @type offset :: integer
+  @type size :: integer
+
+  @type segment :: {String.t, offset, size}
+
   defmodule File do
     defstruct name: nil, offset: 0, size: 0
   end

@@ -1,3 +1,5 @@
+:observer.start
+
 info_hash = <<4, 3, 251, 71, 40, 189, 120, 143, 188, 182, 126, 135, 214, 254, 178, 65, 239, 56, 199, 90>>
 url = "http://torrent.ubuntu.com:6969/announce"
 

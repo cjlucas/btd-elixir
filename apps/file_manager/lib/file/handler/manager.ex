@@ -8,6 +8,7 @@ defmodule Torrent.FileHandler.Manager do
   end
 
   def write(fpath, loc, data) do
+    IO.puts("fpath = #{fpath}, loc = #{loc}")
     GenServer.call(@name, {:write, fpath, loc, data})
   end
 
