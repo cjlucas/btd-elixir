@@ -36,11 +36,13 @@ defmodule File.Manager do
     blocks = 
       Enum.reduce(files, 0, fn {_, size}, acc -> acc + size end) # calc total size
       |> chunk(piece_size) # chunk pieces into list of block sizes
-      |> Enum.map(fn size -> # map to blocks
-        chunk(size, @block_size)
+      |> Enum.map_reduce(0, fn size, acc -> {{acc, size}, size + acc} end)
+      |> elem(0)
+      |> Enum.map(fn {piece_offset, piece_size} -> # map to blocks
+        chunk(piece_size, @block_size)
         |> Enum.map_reduce(0, fn bs, offset ->
           block = %Block{offset: offset, size: bs}
-          segs = segments(block, files)
+          segs = segments(piece_offset + offset, bs, files)
           {%{block | segments: segs}, bs + offset}
         end)
         |> elem(0) # pick list of blocks
@@ -50,7 +52,6 @@ defmodule File.Manager do
       end)
       |> elem(0)
 
-      IO.puts(inspect blocks)
     {:ok, %State{root: root, piece_hashes: piece_hashes, blocks: blocks}}
   end
 
@@ -62,11 +63,14 @@ defmodule File.Manager do
       end)
       |> List.first
 
-    IO.puts(inspect segments)
-    
-    results = segments
-      |> Enum.map(fn {fname, offset, size} -> 
-        <<_::bytes-size(offset), seg_data::bytes-size(size), _::binary>> = data
+    results =
+      segments
+      |> Enum.map_reduce(0, fn {fname, offset, size}, block_offset ->
+        {{fname, offset, size, block_offset}, size + block_offset} 
+      end)
+      |> elem(0)
+      |> Enum.map(fn {fname, offset, size, block_offset} -> 
+        <<_::bytes-size(block_offset), seg_data::bytes-size(size), _::binary>> = data
         Path.join(root, fname)
         |> Torrent.FileHandler.Manager.write(offset, seg_data)
       end)
@@ -80,15 +84,15 @@ defmodule File.Manager do
     {:reply, reply, state}
   end
 
-  @spec segments(Block.t, [file]) :: [segment]
-  def segments(%{offset: offset, size: size}, files) do
+  @spec segments(offset, size, [file]) :: [segment]
+  def segments(offset, size, files) do
     files =
       files
       |> Enum.map_reduce(0, fn {fname, size}, offset -> 
         {{fname, offset, size}, offset + size}
       end)
       |> elem(0)
-      |> Enum.filter(fn {_, off, _} -> offset >= off || offset + size >= off end)
+      |> Enum.filter(fn {_, off, fsize} -> offset <= off + fsize end)
 
 
     segments(offset - (List.first(files) |> elem(1)), size, files, [])
