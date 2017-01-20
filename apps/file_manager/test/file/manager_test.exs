@@ -1,5 +1,5 @@
 defmodule File.ManagerTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case
 
   @tag :skip
   test "segments" do

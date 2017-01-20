@@ -15,11 +15,37 @@ defmodule File.Manager do
   @type segment :: {String.t, offset, size}
 
   defmodule Block do
+    @type status :: :need | :written | :verified
+
     defstruct offset: 0, size: 0, segments: [], status: :need
   end
 
   defmodule State do
     defstruct root: "", piece_hashes: [], blocks: %{}
+
+    def update_block(%{blocks: blocks} = state, piece_idx, block_offset, block_size, status) do
+      block_idx = Map.get(blocks, piece_idx)
+                  |> Enum.find_index(fn %{offset: off, size: size} -> 
+                    block_offset == off && block_size == size
+                  end)
+
+      if is_nil(block_idx) do
+        raise ArgumentError, "block not found"
+      end
+
+      blk_lst = Map.get(blocks, piece_idx)
+                |> List.update_at(block_idx, &(%{&1 | status: status}))
+
+      %{state | blocks: Map.put(blocks, piece_idx, blk_lst)}
+    end
+
+    def find_block(%{blocks: blocks}, piece_idx, block_offset, block_size) do
+      Map.get(blocks, piece_idx)
+      |> Enum.filter(fn %{offset: off, size: size} -> 
+        block_offset == off && block_size == size
+      end)
+      |> List.first
+    end
   end
 
   @spec start_link(binary, String.t, [file], [binary], integer) :: {:ok, pid}
@@ -75,12 +101,16 @@ defmodule File.Manager do
         |> Torrent.FileHandler.Manager.write(offset, seg_data)
       end)
 
-    reply = case Enum.filter(results, fn res -> res == :ok end) do
+    reply = case Enum.filter(results, &(&1 == :ok)) do
       [] -> :ok
       l  -> List.first(l)
     end
 
-    # TODO: block needs to be marked as written
+    state = case reply do
+      :ok         -> State.update_block(state, piece_idx, offset, byte_size(data), :written)
+      {:error, _} -> state
+    end
+
     {:reply, reply, state}
   end
 
