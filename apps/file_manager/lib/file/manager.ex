@@ -84,6 +84,15 @@ defmodule File.Manager do
     {:reply, reply, state}
   end
 
+  def terminate(_reason, %{root: root, blocks: blocks}) do
+    Enum.flat_map(0..Map.size(blocks)-1, &(Map.get(blocks, &1)))
+    |> Enum.flat_map(&(Map.get(&1, :segments)))
+    |> Enum.map(&(elem(&1, 0)))
+    |> Enum.uniq
+    |> Enum.map(fn fname -> Path.join(root, fname) end)
+    |> Enum.each(&(Torrent.FileHandler.Manager.close(&1)))
+  end
+
   @spec segments(offset, size, [file]) :: [segment]
   def segments(offset, size, files) do
     files =

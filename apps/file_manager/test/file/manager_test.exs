@@ -1,6 +1,7 @@
 defmodule File.ManagerTest do
   use ExUnit.Case, async: false
 
+  @tag :skip
   test "segments" do
     import File.Manager, only: [segments: 3]
     files = [{"1.mp3", 5}, {"2.mp3", 10}]
@@ -22,12 +23,19 @@ defmodule File.ManagerTest do
   end
 
   setup do
-    IO.puts("OMGHERE")
-    File.rm_rf!("/tmp/btd")
     File.mkdir("/tmp/btd")
     
     files = [{"1.mp3", 5}, {"2.mp3", 11}]
-    {:ok, pid} = File.Manager.start_link(<<>>, "/tmp/btd", files, [], 3)
+    {:ok, _} = File.Manager.start_link(<<>>, "/tmp/btd", files, [], 3)
+
+    on_exit fn ->
+      # kill all open filehandlers, this is necessary because File.Manager
+      # will be sent a :shutdown signal, which won't trigger it's terminate callback
+      Supervisor.which_children(Torrent.FileHandler.Supervisor)
+      |> Enum.each(fn {_, pid, :worker, _} -> GenServer.stop(pid) end)
+
+      File.rm_rf!("/tmp/btd")
+    end
 
     :ok
   end
@@ -49,7 +57,7 @@ defmodule File.ManagerTest do
       assert File.read!("/tmp/btd/2.mp3") == <<3>>
     end
     
-    test "write entire fileset" do
+    test "write all pieces" do
       assert File.Manager.write_block(<<>>, 0, 0, <<1, 2, 3>>) == :ok
       assert File.Manager.write_block(<<>>, 1, 0, <<4, 5, 6>>) == :ok
       assert File.Manager.write_block(<<>>, 2, 0, <<7, 8, 9>>) == :ok
