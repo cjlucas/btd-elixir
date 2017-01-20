@@ -58,6 +58,10 @@ defmodule File.Manager do
     via(info_hash) |> GenServer.call({:write_block, piece_idx, offset, data})
   end
 
+  def read_block(info_hash, piece_idx, offset, length) do
+    via(info_hash) |> GenServer.call({:read_block, piece_idx, offset, length})
+  end
+
   def init({root, files, piece_hashes, piece_size}) do
     blocks = 
       Enum.reduce(files, 0, fn {_, size}, acc -> acc + size end) # calc total size
@@ -81,13 +85,11 @@ defmodule File.Manager do
     {:ok, %State{root: root, piece_hashes: piece_hashes, blocks: blocks}}
   end
 
-  def handle_call({:write_block, piece_idx, offset, data}, _from, %{root: root, blocks: blocks} = state) do
-    %{segments: segments} =
-      Map.get(blocks, piece_idx)
-      |> Enum.filter(fn %{offset: off, size: size} -> 
-        offset == off && byte_size(data) == size
-      end)
-      |> List.first
+  def handle_call({:write_block, piece_idx, offset, data}, _from, %{root: root} = state) do
+    segments = case State.find_block(state, piece_idx, offset, byte_size(data)) do
+      %{segments: s} -> s
+      nil            -> raise ArgumentError
+    end
 
     results =
       segments
@@ -114,6 +116,9 @@ defmodule File.Manager do
     {:reply, reply, state}
   end
 
+  def handle_call({:read_block, piece_idx, offset, length}, _from, %{blocks: blocks} = state) do
+  end
+
   def terminate(_reason, %{root: root, blocks: blocks}) do
     Enum.flat_map(0..Map.size(blocks)-1, &(Map.get(blocks, &1)))
     |> Enum.flat_map(&(Map.get(&1, :segments)))
@@ -132,7 +137,6 @@ defmodule File.Manager do
       end)
       |> elem(0)
       |> Enum.filter(fn {_, off, fsize} -> offset <= off + fsize end)
-
 
     segments(offset - (List.first(files) |> elem(1)), size, files, [])
   end

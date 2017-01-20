@@ -68,4 +68,15 @@ defmodule File.ManagerTest do
       assert File.read!("/tmp/btd/2.mp3") == <<6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16>>
     end
   end
+
+  test "read_block/4" do
+    File.write!("/tmp/btd/1.mp3", <<1, 2, 3, 4, 5>>)
+    File.write!("/tmp/btd/2.mp3", <<6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16>>)
+    assert File.Manager.read_block(<<>>, 0, 0, 3) == {:ok, <<1, 2, 3>>}
+    assert File.Manager.read_block(<<>>, 1, 0, 3) == {:ok, <<4, 5, 6>>}
+    assert File.Manager.read_block(<<>>, 2, 0, 3) == {:ok, <<7, 8, 9>>}
+    assert File.Manager.read_block(<<>>, 3, 0, 3) == {:ok, <<10, 11, 12>>}
+    assert File.Manager.read_block(<<>>, 4, 0, 3) == {:ok, <<13, 14, 15>>}
+    assert File.Manager.read_block(<<>>, 5, 0, 1) == {:ok, <<16>>}
+  end
 end
