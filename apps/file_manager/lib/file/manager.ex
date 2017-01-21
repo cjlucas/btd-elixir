@@ -118,7 +118,7 @@ defmodule File.Manager do
         Torrent.FileHandler.Manager.write(fpath, offset, seg_data)
       end)
 
-    reply = case Enum.filter(results, &(&1 == :ok)) do
+    reply = case Enum.filter(results, &(&1 != :ok)) do
       [] -> :ok
       l  -> List.first(l)
     end
