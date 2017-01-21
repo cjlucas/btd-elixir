@@ -48,7 +48,6 @@ defmodule File.ManagerTest do
     end
   end
 
-  @tag :skip
   test "read_block/4" do
     File.write!("/tmp/btd/1.mp3", <<1, 2, 3, 4, 5>>)
     File.write!("/tmp/btd/2.mp3", <<6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16>>)

@@ -131,7 +131,21 @@ defmodule File.Manager do
     {:reply, reply, state}
   end
 
-  def handle_call({:read_block, piece_idx, offset, length}, _from, %{blocks: blocks} = state) do
+  def handle_call({:read_block, piece_idx, offset, length}, _from, state) do
+    results =
+      segments(state, piece_idx, offset, length)
+      |> Enum.map(fn {fpath, offset, size} -> 
+        IO.puts("fpath=#{fpath} offset=#{offset} size=#{size}")
+        Torrent.FileHandler.Manager.read(fpath, offset, size)
+      end)
+
+    reply = case Enum.filter(results, &(elem(&1, 0) != :ok)) do
+      [] ->
+        {:ok, Enum.reduce(results, <<>>, fn {:ok, data}, acc -> acc <> data end)}
+      l  -> List.first(l)
+    end
+
+    {:reply, reply, state}
   end
 
   def terminate(_reason, %{root: root, files: files}) do
