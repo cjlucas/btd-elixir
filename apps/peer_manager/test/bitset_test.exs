@@ -12,7 +12,6 @@ defmodule BitSetTest do
   end
 
   test "setting each bit to 0" do
-      require Logger
     for idx <- 0..15 do
       bs = Enum.reduce(0..15, BitSet.new(16), fn x, acc -> BitSet.set(acc, x, 1) end)
       bs = BitSet.set(bs, idx, 0)
