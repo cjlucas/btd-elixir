@@ -129,13 +129,18 @@ defmodule File.Manager do
     results =
       segments(state, piece_idx, offset, length)
       |> Enum.map(fn {fpath, offset, size} -> 
-        IO.puts("fpath=#{fpath} offset=#{offset} size=#{size}")
         Torrent.FileHandler.Manager.read(fpath, offset, size)
+      end)
+      |> Enum.map(fn res ->
+        case res do
+          {:ok, data}      -> {:ok, data}
+          {:error, reason} -> {:error, reason}
+          :eof             -> {:error, :eof}
+        end
       end)
 
     reply = case Enum.filter(results, &(elem(&1, 0) != :ok)) do
-      [] ->
-        {:ok, Enum.reduce(results, <<>>, fn {:ok, data}, acc -> acc <> data end)}
+      [] -> {:ok, Enum.reduce(results, <<>>, fn {:ok, data}, acc -> acc <> data end)}
       l  -> List.first(l)
     end
 
