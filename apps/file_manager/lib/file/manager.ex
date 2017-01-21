@@ -14,13 +14,14 @@ defmodule File.Manager do
 
 
   defmodule Block do
-    @type status :: :need | :written | :verified
 
     defstruct offset: 0, size: 0, status: :need
   end
 
   defmodule State do
     @block_size 16384
+    
+    @type status :: :need | :have | :verified
 
     # FIXME
     @type t :: String.t
@@ -51,6 +52,7 @@ defmodule File.Manager do
       }
     end
 
+    @spec update_block(t, integer, integer, integer, status) :: t
     def update_block(%{blocks: blocks} = state, piece_idx, block_offset, block_size, status) do
       block_idx = Map.get(blocks, piece_idx)
                   |> Enum.find_index(fn %{offset: off, size: size} -> 
@@ -65,14 +67,6 @@ defmodule File.Manager do
                 |> List.update_at(block_idx, &(%{&1 | status: status}))
 
       %{state | blocks: Map.put(blocks, piece_idx, blk_lst)}
-    end
-
-    def find_block(%{blocks: blocks}, piece_idx, block_offset, block_size) do
-      Map.get(blocks, piece_idx)
-      |> Enum.filter(fn %{offset: off, size: size} -> 
-        block_offset == off && block_size == size
-      end)
-      |> List.first
     end
 
     def chunk(total, chunk_size) when total < chunk_size do
