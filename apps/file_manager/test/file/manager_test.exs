@@ -69,4 +69,17 @@ defmodule File.ManagerTest do
       assert File.Manager.read_block(<<>>, 0, 0, 3) == {:error, :eof}
     end
   end
+
+  test "blocks_needed/2" do
+    assert File.Manager.blocks_needed(<<>>, 0) == [{0, 3}]
+    :ok = File.Manager.write_block(<<>>, 0, 0, <<1, 2, 3>>)
+    assert File.Manager.blocks_needed(<<>>, 0) == []
+  end
+ 
+  @tag :skip # TODO: marking verified not implemented yet
+  test "piece_completed?/2" do
+    refute File.Manager.piece_completed?(<<>>, 0)
+    :ok = File.Manager.write_block(<<>>, 0, 0, <<1, 2, 3>>)
+    assert File.Manager.piece_completed?(<<>>, 0)
+  end
 end

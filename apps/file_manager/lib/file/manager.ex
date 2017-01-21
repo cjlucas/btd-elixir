@@ -96,6 +96,14 @@ defmodule File.Manager do
     via(info_hash) |> GenServer.call({:read_block, piece_idx, offset, length})
   end
 
+  def blocks_needed(info_hash, piece_idx) do
+    via(info_hash) |> GenServer.call({:blocks_needed, piece_idx})
+  end
+
+  def piece_completed?(info_hash, piece_idx) do
+    via(info_hash) |> GenServer.call({:piece_completed?, piece_idx})
+  end
+
   def init({root, files, piece_hashes, piece_size}) do
     {:ok, State.new(root, files, piece_hashes, piece_size)}
   end
@@ -143,6 +151,21 @@ defmodule File.Manager do
       [] -> {:ok, Enum.reduce(results, <<>>, fn {:ok, data}, acc -> acc <> data end)}
       l  -> List.first(l)
     end
+
+    {:reply, reply, state}
+  end
+
+  def handle_call({:blocks_needed, piece_idx}, _from, %{blocks: blocks} = state) do
+    reply = Map.get(blocks, piece_idx)
+            |> Enum.filter(fn %{status: status} -> status == :need end)
+            |> Enum.map(fn %{offset: offset, size: size} -> {offset, size} end)
+    {:reply, reply, state}
+  end
+
+  def handle_call({:piece_completed?, piece_idx}, _from, %{blocks: blocks} = state) do
+    reply = Map.get(blocks, piece_idx)
+            |> Enum.filter(fn %{status: status} -> status != :verified end)
+            == []
 
     {:reply, reply, state}
   end
