@@ -69,14 +69,14 @@ defmodule File.Manager do
       %{state | blocks: Map.put(blocks, piece_idx, blk_lst)}
     end
 
-    def chunk(total, chunk_size) when total < chunk_size do
+    defp chunk(total, chunk_size) when total < chunk_size do
       [total]
     end
-    def chunk(total, chunk_size) when rem(total, chunk_size) > 0 do
+    defp chunk(total, chunk_size) when rem(total, chunk_size) > 0 do
       r = rem(total, chunk_size)
       chunk(total - r, chunk_size) ++ [r]
     end
-    def chunk(total, chunk_size) do
+    defp chunk(total, chunk_size) do
       full_pieces = div(total, chunk_size)
       Enum.map(1..full_pieces, fn _ -> chunk_size end)
     end
