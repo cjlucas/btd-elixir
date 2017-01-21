@@ -1,27 +1,6 @@
 defmodule File.ManagerTest do
   use ExUnit.Case
 
-  @tag :skip
-  test "segments" do
-    import File.Manager, only: [segments: 3]
-    files = [{"1.mp3", 5}, {"2.mp3", 10}]
-    assert segments(3, 7, files) == [
-      {"1.mp3", 3, 2},
-      {"2.mp3", 0, 5}
-    ]
-    
-    files = [{"1.mp3", 5}, {"2.mp3", 10}]
-    assert segments(0, 15, files) == [
-      {"1.mp3", 0, 5},
-      {"2.mp3", 0, 10}
-    ]
-    
-    files = [{"1.mp3", 5}, {"2.mp3", 11}]
-    assert segments(15, 1, files) == [
-      {"2.mp3", 10, 1}
-    ]
-  end
-
   setup do
     File.mkdir("/tmp/btd")
     
@@ -56,7 +35,7 @@ defmodule File.ManagerTest do
       assert File.read!("/tmp/btd/1.mp3") == <<0, 0, 0, 1, 2>>
       assert File.read!("/tmp/btd/2.mp3") == <<3>>
     end
-    
+   
     test "write all pieces" do
       assert File.Manager.write_block(<<>>, 0, 0, <<1, 2, 3>>) == :ok
       assert File.Manager.write_block(<<>>, 1, 0, <<4, 5, 6>>) == :ok
@@ -69,6 +48,7 @@ defmodule File.ManagerTest do
     end
   end
 
+  @tag :skip
   test "read_block/4" do
     File.write!("/tmp/btd/1.mp3", <<1, 2, 3, 4, 5>>)
     File.write!("/tmp/btd/2.mp3", <<6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16>>)
