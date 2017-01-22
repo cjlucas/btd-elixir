@@ -1,5 +1,5 @@
 defmodule Peer.EventManager do
-  
+
   @name __MODULE__
 
   def start_link do
@@ -9,7 +9,7 @@ defmodule Peer.EventManager do
   def register(info_hash) do
   	Registry.register(@name, info_hash, [])
   end
-  
+
   def deregister(info_hash) do
     Registry.unregister(@name, info_hash)
   end

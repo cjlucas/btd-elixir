@@ -22,7 +22,7 @@ defmodule Peer.Stats.Store do
       %{state | stats: Map.put(stats, info_hash, %Stats{})}
     end)
   end
-  
+
   def remove(info_hash) do
     Agent.update(__MODULE__, fn %{stats: stats} = state ->
       %{state | stats: Map.delete(stats, info_hash)}
@@ -38,7 +38,7 @@ defmodule Peer.Stats.Store do
   def incr_uploaded(info_hash, amnt) do
     incr_val(info_hash, :uploaded, amnt)
   end
-  
+
   def incr_downloaded(info_hash, amnt) do
     incr_val(info_hash, :downloaded, amnt)
   end

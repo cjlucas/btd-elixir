@@ -6,7 +6,7 @@ defmodule File.Manager.Store do
 
   # offset is the offset within the piece
   @type block :: {offset :: integer, size :: integer, status}
-  
+
   @type segment :: {String.t, offset :: integer, size :: integer}
 
   defmodule Entry do
@@ -21,7 +21,7 @@ defmodule File.Manager.Store do
 
   @spec add(binary, String.t, [file], binary, integer, integer) :: :ok
   def add(info_hash, root, files, piece_hashes, piece_size, block_size) do
-    blocks = 
+    blocks =
       files
       |> Enum.reduce(0, fn {_, size}, offset -> offset + size end) # calc total size
       |> chunk(piece_size) # chunk pieces into list of block sizes
@@ -35,7 +35,7 @@ defmodule File.Manager.Store do
         {Map.put(m, i, block), i+1}
       end)
       |> elem(0)
-      
+
     files =
       files
       |> Enum.map_reduce(0, fn {fname, size}, offset ->
@@ -97,14 +97,14 @@ defmodule File.Manager.Store do
   end
   defp calc_segments(offset, bytes_left, [{fname, _, size} | rest], acc) do
     seg_size = Enum.min([bytes_left, size - offset])
-    seg = {fname, offset, seg_size} 
+    seg = {fname, offset, seg_size}
     calc_segments(0, bytes_left - seg_size, rest, [seg | acc])
   end
 
   @spec update_status(binary, integer, {integer, integer}, status) :: :ok
   def update_status(info_hash, piece_idx, {offset, size}, status) do
     update_piece(info_hash, piece_idx, fn blocks ->
-      block_idx = Enum.find_index(blocks, fn {off, sz, _} -> 
+      block_idx = Enum.find_index(blocks, fn {off, sz, _} ->
         offset == off && size == sz
       end)
 

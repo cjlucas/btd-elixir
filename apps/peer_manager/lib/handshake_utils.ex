@@ -20,13 +20,13 @@ defmodule Peer.HandshakeUtils do
   def req1(s), do: hash([<<"req1">>, s])
 
   def req2(skey), do: hash([<<"req2">>, skey])
-  
+
   def req3(s), do: hash([<<"req3">>, s])
 
   def key(prefix, s, skey), do: hash([prefix, s, skey])
-  
+
   def hash(buf), do: :crypto.hash(:sha, buf)
-  
+
   def rand(n), do: :rand.uniform(n+1) - 1
 
   def sync(needle, haystack), do: sync(needle, haystack, 0)

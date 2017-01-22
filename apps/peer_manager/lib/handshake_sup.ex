@@ -8,14 +8,14 @@ defmodule Peer.Handshake.Supervisor do
   def listen(sock) do
     Supervisor.start_child(__MODULE__, [sock])
   end
-  
+
   def connect(host, port, info_hash) do
     Supervisor.start_child(__MODULE__, [host, port, info_hash])
   end
 
   def init(:ok) do
     children = [
-      worker(Peer.Handshake, [], restart: :temporary)    
+      worker(Peer.Handshake, [], restart: :temporary)
     ]
 
     supervise(children, strategy: :simple_one_for_one)

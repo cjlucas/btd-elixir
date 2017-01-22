@@ -53,7 +53,7 @@ defmodule FileStream.Manager do
     with {:ok, f} = :file.open(fpath, [:read, :binary, :raw]),
          {:ok, data} = :file.pread(f, off, len),
          :ok = :file.close(f),
-      do: data 
+      do: data
   end
 
   def handle_call({:read_block, piece_idx, offset, length}, _from, state) do

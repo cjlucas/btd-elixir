@@ -31,7 +31,7 @@ defmodule BitSetTest do
   test "from binary" do
     bs = BitSet.from_binary(<<255, 255>>)
     for x <- 0..15, do: assert BitSet.get(bs, x) == 1
-    
+
     bs = BitSet.from_binary(<<0::16>>)
     for x <- 0..15, do: assert BitSet.get(bs, x) == 0
   end

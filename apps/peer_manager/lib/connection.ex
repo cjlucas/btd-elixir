@@ -31,7 +31,7 @@ defmodule Peer.Connection do
     host = host |> Tuple.to_list |> Enum.join(".")
     Peer.Registry.register(info_hash, {host, port})
     Peer.EventManager.received_connection(info_hash, self())
-    {:ok, %State{info_hash: info_hash, sock: sock}} 
+    {:ok, %State{info_hash: info_hash, sock: sock}}
   end
 
   def handle_info({:tcp, _sock, data}, %{info_hash: hash, sock: sock, buffer: buf} = state) do
@@ -73,7 +73,7 @@ defmodule Peer.Connection do
   end
 
   def terminate(_reason, %{sock: sock}) do
-    Peer.Socket.close(sock)  
+    Peer.Socket.close(sock)
   end
 
   defp process_buffer(<<0::32, rest::binary>>), do: process_buffer(rest)
@@ -93,7 +93,7 @@ defmodule Peer.Connection do
   defp handle_msg(%Bitfield{bitfield: bits}, state) do
     {:noreply, %{state | bitfield: BitSet.from_binary(bits)}}
   end
-  
+
   defp handle_msg(%Choke{}, state) do
     {:noreply, %{state | choked: true}}
   end
@@ -101,11 +101,11 @@ defmodule Peer.Connection do
   defp handle_msg(%Unchoke{}, state) do
     {:noreply, %{state | choked: false}}
   end
-  
+
   defp handle_msg(%Interested{}, state) do
     {:noreply, %{state | interested: true}}
   end
-  
+
   defp handle_msg(%NotInterested{}, state) do
     {:noreply, %{state | interested: false}}
   end

@@ -14,7 +14,7 @@ defmodule File.Manager.StoreTest do
 
     %{info_hash: info_hash, files: files, piece_hashes: piece_hashes}
   end
-  
+
   test "pieces/1", %{info_hash: info_hash} do
     assert Store.pieces(info_hash) == [
       [
@@ -68,7 +68,7 @@ defmodule File.Manager.StoreTest do
       {0, 1, :need}
     ]
   end
-  
+
   test "update_status/4", %{info_hash: info_hash} do
     assert Store.update_status(info_hash, 0, {0, 2}, :have) == :ok
     assert Store.blocks(info_hash, 0) == [
@@ -81,7 +81,7 @@ defmodule File.Manager.StoreTest do
       {2, 1, :have}
     ]
   end
-  
+
   test "update_status/3", %{info_hash: info_hash} do
     assert Store.update_status(info_hash, 0, :have) == :ok
     assert Store.blocks(info_hash, 0) == [
@@ -89,7 +89,7 @@ defmodule File.Manager.StoreTest do
       {2, 1, :have}
     ]
   end
-  
+
   test "piece_complete?/2", %{info_hash: info_hash} do
     refute Store.piece_complete?(info_hash, 0)
     :ok = Store.update_status(info_hash, 0, :have)

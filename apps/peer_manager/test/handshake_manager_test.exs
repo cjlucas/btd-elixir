@@ -6,7 +6,7 @@ defmodule Peer.HandshakeTest do
   setup do
     {:ok, listen} = :gen_tcp.listen(0, [:binary, active: false])
 
-    on_exit fn -> 
+    on_exit fn ->
       :gen_tcp.close(listen)
     end
 
@@ -33,11 +33,11 @@ defmodule Peer.HandshakeTest do
     {:ok, pid} = Peer.Handshake.start_link("127.0.0.1", port, @info_hash)
 
     Process.flag(:trap_exit, true)
-    
+
     {:ok, ssock} = :gen_tcp.accept(ctx.listen)
 
     {:ok, pubA} = :gen_tcp.recv(ssock, 96)
-    
+
     {priv, pub} = Peer.HandshakeUtils.gen_keys()
     :ok = :gen_tcp.send(ssock, [pub, <<0::16>>])
 
@@ -104,7 +104,7 @@ defmodule Peer.HandshakeTest do
 
     {priv, pub} = Peer.HandshakeUtils.gen_keys()
     :ok = :gen_tcp.send(csock, [pub, <<0::16>>])
-    
+
     {:ok, pubB} = :gen_tcp.recv(csock, 96)
 
     s = Peer.HandshakeUtils.calc_secret(pubB, priv)
@@ -116,7 +116,7 @@ defmodule Peer.HandshakeTest do
         Peer.HandshakeUtils.req3(s)
       )
     ])
-    
+
     {ins, outs} = Peer.HandshakeUtils.init_streams(
       Peer.HandshakeUtils.key(<<"keyB">>, s, @info_hash),
       Peer.HandshakeUtils.key(<<"keyA">>, s, @info_hash)

@@ -68,7 +68,7 @@ defmodule Bittorrent.Message do
     case payload do
       <<
         index :: big-size(32),
-        begin :: big-size(32), 
+        begin :: big-size(32),
         len :: big-size(32)
       >> -> {:ok, %Request{index: index, begin: begin, length: len}}
       _ -> {:error, :decode_failed}
@@ -79,7 +79,7 @@ defmodule Bittorrent.Message do
     case payload do
       <<
         index :: big-size(32),
-        begin :: big-size(32), 
+        begin :: big-size(32),
         block :: binary
       >> -> {:ok, %Piece{index: index, begin: begin, block: block}}
       _ -> {:error, :decode_failed}
@@ -97,7 +97,7 @@ defmodule Bittorrent.Message do
     case payload do
       <<
         index :: big-size(32),
-        begin :: big-size(32), 
+        begin :: big-size(32),
         length :: big-size(32),
       >> -> {:ok, %Cancel{index: index, begin: begin, length: length}}
       _ -> {:error, :decode_failed}
@@ -137,7 +137,7 @@ defmodule Bittorrent.Message do
     <<
       msg_id(:request) :: size(8),
       index :: big-size(32),
-      begin :: big-size(32), 
+      begin :: big-size(32),
       length :: big-size(32),
     >>
   end
@@ -146,7 +146,7 @@ defmodule Bittorrent.Message do
     <<
       msg_id(:piece) :: size(8),
       index :: big-size(32),
-      begin :: big-size(32), 
+      begin :: big-size(32),
       block :: binary,
     >>
   end
@@ -155,7 +155,7 @@ defmodule Bittorrent.Message do
     <<
       msg_id(:cancel) :: size(8),
       index :: big-size(32),
-      begin :: big-size(32), 
+      begin :: big-size(32),
       length :: big-size(32),
     >>
   end

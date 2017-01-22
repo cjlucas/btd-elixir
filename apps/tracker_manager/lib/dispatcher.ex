@@ -34,11 +34,11 @@ defmodule Tracker.Dispatcher do
     do_request(req)
     {:noreply, %{state | slots: slots-1}}
   end
-  
+
   def handle_cast({:request, req}, %{slots: slots, queue: q} = state) when slots == 0 do
     {:noreply, %{state | queue: :queue.in(req, q)}}
   end
-  
+
   def handle_info({:DOWN, _ref, :process, _pid, _reason}, %{slots: slots, queue: q} = state) do
     state = cond do
       slots == 0 && !:queue.is_empty(q) ->
@@ -49,7 +49,7 @@ defmodule Tracker.Dispatcher do
       true ->
         %{state | slots: slots+1}
     end
-        
+
     {:noreply, state}
   end
 

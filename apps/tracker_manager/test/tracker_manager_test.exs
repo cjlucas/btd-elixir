@@ -1,7 +1,7 @@
 defmodule Tracker.Manager.EntryTest do
   use ExUnit.Case
   alias Tracker.Manager.Entry
-    
+
   test "reorder_trackers" do
     cases = [
       %{

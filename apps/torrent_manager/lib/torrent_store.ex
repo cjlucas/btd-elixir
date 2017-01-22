@@ -2,7 +2,7 @@ defmodule Torrent.Store do
   use GenServer
 
   defmodule State do
-    defstruct torrent: nil, peer_id: <<>>, uploaded: 0, downloaded: 0 
+    defstruct torrent: nil, peer_id: <<>>, uploaded: 0, downloaded: 0
   end
 
   def start_link(torrent) do
@@ -12,7 +12,7 @@ defmodule Torrent.Store do
   def incr_upload(pid, incr_amnt) when is_number(incr_amnt) do
     GenServer.call(pid, {:incr_upload, incr_amnt})
   end
-  
+
   def incr_download(pid, incr_amnt) when is_number(incr_amnt) do
     GenServer.call(pid, {:incr_download, incr_amnt})
   end
@@ -27,11 +27,11 @@ defmodule Torrent.Store do
   end
 
   def handle_call({:incr_upload, amnt}, _from, %{uploaded: uploaded} = state) do
-    {:reply, :ok, %{state | uploaded: uploaded + amnt}} 
+    {:reply, :ok, %{state | uploaded: uploaded + amnt}}
   end
-  
+
   def handle_call({:incr_download, amnt}, _from, %{downloaded: downloaded} = state) do
-    {:reply, :ok, %{state | downloaded: downloaded + amnt}} 
+    {:reply, :ok, %{state | downloaded: downloaded + amnt}}
   end
 
   def handle_call(:state, _from, state) do

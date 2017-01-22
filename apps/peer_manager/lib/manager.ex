@@ -27,12 +27,12 @@ defmodule Peer.Manager do
     Peer.Connection.send_msg(conn, %Interested{})
     {:noreply, state}
   end
-  
+
   def handle_info({:received_message, conn, %Unchoke{}}, state) do
     Peer.Connection.send_msg(conn, %Request{index: 0, begin: 0, length: 16384})
     {:noreply, state}
   end
-  
+
   def handle_info({:received_message, _conn, %Piece{block: block}}, %{info_hash: h} = state) do
     Peer.Stats.Store.incr_downloaded(h, byte_size(block))
     {:noreply, state}
@@ -47,7 +47,7 @@ defmodule Peer.Manager do
     Peer.Stats.Store.incr_uploaded(h, byte_size(block))
     {:noreply, state}
   end
-  
+
   def handle_info({:sent_message, _conn, msg}, state) do
     Logger.debug("Sent unhandled message: #{inspect msg}")
     {:noreply, state}

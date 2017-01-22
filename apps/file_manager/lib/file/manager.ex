@@ -28,10 +28,10 @@ defmodule File.Manager do
     results =
       Store.segments(info_hash, piece_idx, offset, byte_size(data))
       |> Enum.map_reduce(0, fn {fpath, offset, size}, block_offset ->
-        {{fpath, offset, size, block_offset}, size + block_offset} 
+        {{fpath, offset, size, block_offset}, size + block_offset}
       end)
       |> elem(0)
-      |> Enum.map(fn {fpath, offset, size, block_offset} -> 
+      |> Enum.map(fn {fpath, offset, size, block_offset} ->
         <<_::bytes-size(block_offset), seg_data::bytes-size(size), _::binary>> = data
         Torrent.FileHandler.Manager.write(fpath, offset, seg_data)
       end)
@@ -89,7 +89,7 @@ defmodule File.Manager do
   defp do_read_block(piece_idx, offset, length, info_hash) do
     results =
       Store.segments(info_hash, piece_idx, offset, length)
-      |> Enum.map(fn {fpath, offset, size} -> 
+      |> Enum.map(fn {fpath, offset, size} ->
         Torrent.FileHandler.Manager.read(fpath, offset, size)
       end)
       |> Enum.map(fn res ->

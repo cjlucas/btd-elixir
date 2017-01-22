@@ -17,7 +17,7 @@ defmodule Peer.Stats.StoreTest do
     Store.add(info_hash)
     assert Store.stats(info_hash) == %Stats{}
   end
-  
+
   test "remove/1", %{info_hash: info_hash} do
     Store.remove(info_hash)
     assert Store.stats(info_hash) == nil
@@ -27,7 +27,7 @@ defmodule Peer.Stats.StoreTest do
     assert Store.incr_uploaded(info_hash, 5) == %Stats{uploaded: 5}
     assert Store.incr_uploaded(info_hash, 10) == %Stats{uploaded: 15}
   end
-  
+
   test "incr_downloaded/2", %{info_hash: info_hash} do
     assert Store.incr_downloaded(info_hash, 5) == %Stats{downloaded: 5}
     assert Store.incr_downloaded(info_hash, 10) == %Stats{downloaded: 15}
