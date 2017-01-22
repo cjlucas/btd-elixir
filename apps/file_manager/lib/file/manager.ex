@@ -127,15 +127,14 @@ defmodule File.Manager do
         Torrent.FileHandler.Manager.write(fpath, offset, seg_data)
       end)
 
-    reply = case Enum.filter(results, &(&1 != :ok)) do
-      [] -> :ok
-      l  -> List.first(l)
-    end
-
-    state = case reply do
-      :ok         -> State.update_block(state, piece_idx, offset, byte_size(data), :written)
-      {:error, _} -> state
-    end
+    {reply, state} =
+      case Enum.filter(results, &(&1 != :ok)) do
+        [] ->
+          state = State.update_block(state, piece_idx, offset, byte_size(data), :written)
+          {:ok, state}
+        l  ->
+          {List.first(l), state}
+      end
 
     {:reply, reply, state}
   end
