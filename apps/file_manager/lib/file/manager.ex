@@ -69,6 +69,13 @@ defmodule File.Manager do
       %{state | blocks: Map.put(blocks, piece_idx, blk_lst)}
     end
 
+    def update_blocks(%{blocks: blocks} = state, piece_idx, status) do
+      Map.get(blocks, piece_idx)
+      |> Enum.reduce(state, fn %{offset: offset, size: size}, acc ->
+        update_block(acc, piece_idx, offset, size, status)
+      end)
+    end
+
     defp chunk(total, chunk_size) when total < chunk_size do
       [total]
     end
