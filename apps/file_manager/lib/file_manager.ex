@@ -9,6 +9,7 @@ defmodule FileManager do
     children = [
       supervisor(Registry, [:unique, File.Manager.Registry], id: File.Manager.Registry),
       supervisor(Torrent.FileHandler.Supervisor, []),
+      worker(File.Manager.Store, []),
       worker(Registry, [:unique, Torrent.FileHandler.Registry]),
       worker(Torrent.FileHandler.Manager, [])
     ]
