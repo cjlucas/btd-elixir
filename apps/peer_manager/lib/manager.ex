@@ -33,7 +33,7 @@ defmodule Peer.Manager do
     {:noreply, state}
   end
   
-  def handle_info({:received_message,_conn, %Piece{block: block}, %{info_hash: h} = state}) do
+  def handle_info({:received_message, _conn, %Piece{block: block}, %{info_hash: h} = state}) do
     Peer.Stats.Store.incr_downloaded(h, byte_size(block))
     {:noreply, state}
   end
