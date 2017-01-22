@@ -64,6 +64,14 @@ defmodule File.Manager.Store do
     Agent.update(__MODULE__, fn _ -> %{} end)
   end
 
+  @spec pieces(binary) :: [[block]]
+  def pieces(info_hash) do
+    get_entry(info_hash, fn %{blocks: blocks} ->
+      0..Map.size(blocks)-1
+      |> Enum.map(&(Map.get(blocks, &1)))
+    end)
+  end
+
   @spec blocks(binary, integer) :: [block]
   def blocks(info_hash, piece_idx) do
     get_entry(info_hash, fn %{blocks: blocks} ->

@@ -14,6 +14,34 @@ defmodule File.Manager.StoreTest do
 
     %{info_hash: info_hash, files: files, piece_hashes: piece_hashes}
   end
+  
+  test "pieces/1", %{info_hash: info_hash} do
+    assert Store.pieces(info_hash) == [
+      [
+        {0, 2, :need},
+        {2, 1, :need}
+      ],
+      [
+        {0, 2, :need},
+        {2, 1, :need}
+      ],
+      [
+        {0, 2, :need},
+        {2, 1, :need}
+      ],
+      [
+        {0, 2, :need},
+        {2, 1, :need}
+      ],
+      [
+        {0, 2, :need},
+        {2, 1, :need}
+      ],
+      [
+        {0, 1, :need}
+      ]
+    ]
+  end
 
   test "blocks/2", %{info_hash: info_hash} do
     assert Store.blocks(info_hash, 0) == [
