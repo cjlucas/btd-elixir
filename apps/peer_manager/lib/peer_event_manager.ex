@@ -22,6 +22,10 @@ defmodule Peer.EventManager do
     notify(info_hash, {:received_message, conn, msg})
   end
 
+  def sent_message(info_hash, {conn, msg}) do
+    notify(info_hash, {:sent_message, conn, msg})
+  end
+
   defp notify(info_hash, msg) do
     Registry.dispatch(@name, info_hash, fn entries ->
       for {pid, _} <- entries, do: send(pid, msg)

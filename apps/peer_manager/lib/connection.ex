@@ -59,11 +59,12 @@ defmodule Peer.Connection do
     {:reply, BitSet.get(bits, idx) == 1, state}
   end
 
-  def handle_cast({:send_msg, msg}, %{sock: sock} = state) do
+  def handle_cast({:send_msg, msg}, %{info_hash: hash, sock: sock} = state) do
     Logger.debug("Sending message: #{inspect msg}")
     data = Bittorrent.Message.encode(msg)
     case Peer.Socket.send(sock, [<<byte_size(data)::32>>, data]) do
       {:ok, sock} ->
+        Peer.EventManager.sent_message(hash, {self(), msg})
         {:noreply, %{state | sock: sock}}
       {:error, reason} ->
         Logger.debug("Send failed with reason: #{reason}")
