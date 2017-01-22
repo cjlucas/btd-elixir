@@ -96,8 +96,8 @@ defmodule File.Manager.Store do
   @spec update_status(binary, integer, {integer, integer}, status) :: :ok
   def update_status(info_hash, piece_idx, {offset, size}, status) do
     update_piece(info_hash, piece_idx, fn blocks ->
-      block_idx = Enum.find_index(blocks, fn {off, size, _} -> 
-        offset == off && size == size
+      block_idx = Enum.find_index(blocks, fn {off, sz, _} -> 
+        offset == off && size == sz
       end)
 
       List.update_at(blocks, block_idx, fn {offset, size, _} ->
