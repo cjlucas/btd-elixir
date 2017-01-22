@@ -52,7 +52,7 @@ defmodule Peer.Connection do
     {:stop, :normal, state}
   end
 
-  def handle_call({:has_piece?, idx}, _from, %{bitfield: bits} = state) when is_nil(bits) do
+  def handle_call({:has_piece?, _idx}, _from, %{bitfield: bits} = state) when is_nil(bits) do
     {:reply, false, state}
   end
   def handle_call({:has_piece?, idx}, _from, %{bitfield: bits} = state) do

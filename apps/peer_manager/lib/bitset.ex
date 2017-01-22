@@ -36,7 +36,7 @@ defmodule BitSet do
   def from_binary(binary, idx, acc) when idx >= 8 * byte_size(binary), do: acc
   def from_binary(binary, idx, %{bits: bits}) do
     byte_offset = div(idx, 8)
-    <<_::bytes-size(byte_offset), byte::8, rest::binary>> = binary
+    <<_::bytes-size(byte_offset), byte::8, _::binary>> = binary
     from_binary(binary, idx+1, %BitSet{bits: :array.set(byte_offset, byte, bits)})
   end
 end

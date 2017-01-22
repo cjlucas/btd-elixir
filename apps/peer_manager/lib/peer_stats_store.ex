@@ -17,13 +17,13 @@ defmodule Peer.Stats.Store do
     Agent.update(__MODULE__, fn _ -> %State{} end)
   end
 
-  def register(info_hash) do
+  def add(info_hash) do
     Agent.update(__MODULE__, fn %{stats: stats} = state ->
       %{state | stats: Map.put(stats, info_hash, %Stats{})}
     end)
   end
   
-  def deregister(info_hash) do
+  def remove(info_hash) do
     Agent.update(__MODULE__, fn %{stats: stats} = state ->
       %{state | stats: Map.delete(stats, info_hash)}
     end)

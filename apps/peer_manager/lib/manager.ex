@@ -19,7 +19,7 @@ defmodule Peer.Manager do
     {:ok, %State{info_hash: info_hash}}
   end
 
-  def handle_info({:received_connection, conn}, state) do
+  def handle_info({:received_connection, _conn}, state) do
     {:noreply, state}
   end
 
@@ -33,7 +33,7 @@ defmodule Peer.Manager do
     {:noreply, state}
   end
   
-  def handle_info({:received_message, conn, %Piece{block: block}, %{info_hash: h} = state}) do
+  def handle_info({:received_message,_conn, %Piece{block: block}, %{info_hash: h} = state}) do
     Peer.Stats.Store.incr_downloaded(h, byte_size(block))
     {:noreply, state}
   end
@@ -43,7 +43,7 @@ defmodule Peer.Manager do
     {:noreply, state}
   end
 
-  def handle_info({:sent_message, conn, %Piece{block: block}, %{info_hash: h} = state}) do
+  def handle_info({:sent_message, _conn, %Piece{block: block}, %{info_hash: h} = state}) do
     Peer.Stats.Store.incr_uploaded(h, byte_size(block))
     {:noreply, state}
   end

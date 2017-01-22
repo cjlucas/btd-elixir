@@ -14,9 +14,6 @@ defmodule Peer.Handshake do
   @pstr "BitTorrent protocol"
   @pstrlen 19
 
-  # TODO: this should be in external config
-  @sock_timeout 1000
-
   @outgoing_flow [
     :send_pubkey,
     :recv_pubkey,
@@ -136,7 +133,7 @@ defmodule Peer.Handshake do
 
   # state handlers
   
-  defp dispatch_handler(%{conn: conn, info_hash: h, peer_id: id, buffer: buf, states: []} = state) do
+  defp dispatch_handler(%{conn: conn, info_hash: h, buffer: buf, states: []} = state) do
     Logger.debug("All done")
     with :ok <- :inet.setopts(conn.sock, [active: false]),
       {:ok, pid} <- Peer.Connection.Supervisor.start_child(h, conn),
@@ -407,7 +404,7 @@ defmodule Peer.Handshake do
   defp handle_state(:recv_reserved, %{conn: conn, buffer: buf} = info) do
     if iolist_size(buf) >= 8 do
       <<reserved_enc::bytes-size(8), rest::binary>> = iolist_to_binary(buf)
-      {conn, reserved} = Peer.Socket.decrypt(conn, reserved_enc)
+      {conn, _} = Peer.Socket.decrypt(conn, reserved_enc)
       {:next_state, %{info | conn: conn, buffer: [rest]}}
     else
       :no_change

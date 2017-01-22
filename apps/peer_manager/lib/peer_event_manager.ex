@@ -11,7 +11,7 @@ defmodule Peer.EventManager do
   end
   
   def deregister(info_hash) do
-    Registry.deregister(@name, info_hash)
+    Registry.unregister(@name, info_hash)
   end
 
   def received_connection(info_hash, conn) do
