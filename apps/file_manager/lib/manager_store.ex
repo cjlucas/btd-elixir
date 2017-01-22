@@ -54,10 +54,12 @@ defmodule File.Manager.Store do
     Agent.update(__MODULE__, &(Map.put_new(&1, info_hash, entry)))
   end
 
+  @spec remove(binary) :: :ok
   def remove(info_hash) do
     Agent.update(__MODULE__, &Map.delete(&1, info_hash))
   end
 
+  @spec reset :: :ok
   def reset do
     Agent.update(__MODULE__, fn _ -> %{} end)
   end
@@ -69,8 +71,9 @@ defmodule File.Manager.Store do
     end)
   end
 
+  @spec segments(binary, integer, integer, integer) :: [segment]
   def segments(info_hash, piece_idx, offset, size) do
-    get_entry(info_hash, fn %{root: root, files: files, blocks: blocks, piece_size: piece_size} ->
+    get_entry(info_hash, fn %{root: root, files: files, piece_size: piece_size} ->
       offset = (piece_idx * piece_size) + offset
       files = Enum.filter(files, fn {_, off, fsize} -> offset <= off + fsize end)
 
@@ -128,12 +131,14 @@ defmodule File.Manager.Store do
     end)
   end
 
+  @spec piece_complete?(binary, integer) :: boolean
   def piece_complete?(info_hash, piece_idx) do
     get_piece(info_hash, piece_idx, fn blocks ->
       Enum.filter(blocks, fn {_, _, status} -> status == :need end) == []
     end)
   end
 
+  @spec piece_hash(binary, integer) :: binary
   def piece_hash(info_hash, piece_idx) do
     get_entry(info_hash, fn %{piece_hashes: hashes} ->
       Enum.at(hashes, piece_idx)
