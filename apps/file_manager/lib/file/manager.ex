@@ -69,12 +69,11 @@ defmodule File.Manager do
     {:reply, reply, info_hash}
   end
 
-  #def terminate(_reason, %{root: root, files: files}) do
-    #files
-    #|> Enum.map(&elem(&1, 0))
-    #|> Enum.map(fn fname -> Path.join(root, fname) end)
-    #|> Enum.each(&(Torrent.FileHandler.Manager.close(&1)))
-  #end
+  def terminate(_reason, info_hash) do
+    info_hash
+    |> Store.files
+    |> Enum.each(&(Torrent.FileHandler.Manager.close(&1)))
+  end
 
   defp via(info_hash) do
     {:via, Registry, {File.Manager.Registry, info_hash}}

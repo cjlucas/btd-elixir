@@ -80,4 +80,11 @@ defmodule File.Manager.StoreTest do
       {"/tmp/btd/2.mp3", 0, 1}
     ]
   end
+
+  test "files/1", %{info_hash: info_hash} do
+    assert Store.files(info_hash) == [
+      {"/tmp/btd/1.mp3", 5},
+      {"/tmp/btd/2.mp3", 11}
+    ]
+  end
 end

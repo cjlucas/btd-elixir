@@ -119,6 +119,15 @@ defmodule File.Manager.Store do
     end)
   end
 
+  @spec files(binary) :: [file]
+  def files(info_hash) do
+    get_entry(info_hash, fn %{root: root, files: files} ->
+      Enum.map(files, fn {fname, _, size} ->
+        {Path.join(root, fname), size}
+      end)
+    end)
+  end
+
   def piece_completed?(info_hash, piece_idx) do
     get_piece(info_hash, piece_idx, fn blocks ->
       Enum.filter(blocks, fn {_, _, status} -> status == :need end) == []
