@@ -1,11 +1,19 @@
 defmodule File.ManagerTest do
   use ExUnit.Case
 
+  setup_all do
+    files = [{"1.mp3", 5}, {"2.mp3", 11}]
+    :ok = File.Manager.Store.add(<<>>, "/tmp/btd", files, [], 3, 3)
+
+    on_exit fn ->
+      File.Manager.Store.remove(<<>>)
+    end
+  end
+
   setup do
     File.mkdir("/tmp/btd")
-    
-    files = [{"1.mp3", 5}, {"2.mp3", 11}]
-    {:ok, _} = File.Manager.start_link(<<>>, "/tmp/btd", files, [], 3)
+
+    {:ok, _} = File.Manager.start_link(<<>>)
 
     on_exit fn ->
       # kill all open filehandlers, this is necessary because File.Manager
@@ -68,18 +76,5 @@ defmodule File.ManagerTest do
     test "missing block" do
       assert File.Manager.read_block(<<>>, 0, 0, 3) == {:error, :eof}
     end
-  end
-
-  test "blocks_needed/2" do
-    assert File.Manager.blocks_needed(<<>>, 0) == [{0, 3}]
-    :ok = File.Manager.write_block(<<>>, 0, 0, <<1, 2, 3>>)
-    assert File.Manager.blocks_needed(<<>>, 0) == []
-  end
- 
-  @tag :skip # TODO: marking verified not implemented yet
-  test "piece_completed?/2" do
-    refute File.Manager.piece_completed?(<<>>, 0)
-    :ok = File.Manager.write_block(<<>>, 0, 0, <<1, 2, 3>>)
-    assert File.Manager.piece_completed?(<<>>, 0)
   end
 end

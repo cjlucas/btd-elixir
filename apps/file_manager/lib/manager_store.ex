@@ -55,9 +55,7 @@ defmodule File.Manager.Store do
   end
 
   def remove(info_hash) do
-    Agent.update(__MODULE__, fn %{blocks: blocks} = entries ->
-      %{entries | blocks: Map.delete(blocks, info_hash)}
-    end)
+    Agent.update(__MODULE__, &Map.delete(&1, info_hash))
   end
 
   def reset do

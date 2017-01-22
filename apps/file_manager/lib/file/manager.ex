@@ -1,4 +1,5 @@
 defmodule File.Manager do
+  alias File.Manager.Store
 
   @moduledoc """
   Manages file set for a given torrent
@@ -6,93 +7,8 @@ defmodule File.Manager do
 
   use GenServer
 
-  @type file :: {String.t, integer}
-  @type offset :: integer
-  @type size :: integer
-
-  @type segment :: {String.t, offset, size}
-
-
-  defmodule Block do
-
-    defstruct offset: 0, size: 0, status: :need
-  end
-
-  defmodule State do
-    @block_size 16384
-    
-    @type status :: :need | :have | :verified
-
-    # FIXME
-    @type t :: String.t
-
-    defstruct root: "", files: [], piece_size: 0, piece_hashes: [], blocks: %{}
-
-    def new(root, files, piece_hashes, piece_size) do
-      blocks = 
-        Enum.reduce(files, 0, fn {_, size}, offset -> offset + size end) # calc total size
-        |> chunk(piece_size) # chunk pieces into list of block sizes
-        |> Enum.map(&chunk(&1, @block_size))
-        |> Enum.map(fn blocks ->
-          Enum.map_reduce(blocks, 0, fn block_size, offset ->
-            {%Block{offset: offset, size: block_size}, block_size + offset}
-          end) |> elem(0)
-        end)
-        |> Enum.reduce({%{}, 0}, fn block, {m, i} -> # reduce to map
-          {Map.put(m, i, block), i+1}
-        end)
-        |> elem(0)
-
-      %State{
-        root: root,
-        files: files,
-        piece_size: piece_size,
-        piece_hashes: piece_hashes,
-        blocks: blocks
-      }
-    end
-
-    @spec update_block(t, integer, integer, integer, status) :: t
-    def update_block(%{blocks: blocks} = state, piece_idx, block_offset, block_size, status) do
-      block_idx = Map.get(blocks, piece_idx)
-                  |> Enum.find_index(fn %{offset: off, size: size} -> 
-                    block_offset == off && block_size == size
-                  end)
-
-      if is_nil(block_idx) do
-        raise ArgumentError, "block not found"
-      end
-
-      blk_lst = Map.get(blocks, piece_idx)
-                |> List.update_at(block_idx, &(%{&1 | status: status}))
-
-      %{state | blocks: Map.put(blocks, piece_idx, blk_lst)}
-    end
-
-    def update_blocks(%{blocks: blocks} = state, piece_idx, status) do
-      Map.get(blocks, piece_idx)
-      |> Enum.reduce(state, fn %{offset: offset, size: size}, acc ->
-        update_block(acc, piece_idx, offset, size, status)
-      end)
-    end
-
-    defp chunk(total, chunk_size) when total < chunk_size do
-      [total]
-    end
-    defp chunk(total, chunk_size) when rem(total, chunk_size) > 0 do
-      r = rem(total, chunk_size)
-      chunk(total - r, chunk_size) ++ [r]
-    end
-    defp chunk(total, chunk_size) do
-      full_pieces = div(total, chunk_size)
-      Enum.map(1..full_pieces, fn _ -> chunk_size end)
-    end
-  end
-
-  @spec start_link(binary, String.t, [file], [binary], integer) :: {:ok, pid}
-  def start_link(info_hash, root, files, piece_hashes, piece_size) do
-    name = via(info_hash)
-    GenServer.start_link(__MODULE__, {root, files, piece_hashes, piece_size}, name: name)
+  def start_link(info_hash) do
+    GenServer.start_link(__MODULE__, info_hash, name: via(info_hash))
   end
 
   def write_block(info_hash, piece_idx, offset, data) do
@@ -103,21 +19,13 @@ defmodule File.Manager do
     via(info_hash) |> GenServer.call({:read_block, piece_idx, offset, length})
   end
 
-  def blocks_needed(info_hash, piece_idx) do
-    via(info_hash) |> GenServer.call({:blocks_needed, piece_idx})
+  def init(info_hash) do
+    {:ok, info_hash}
   end
 
-  def piece_completed?(info_hash, piece_idx) do
-    via(info_hash) |> GenServer.call({:piece_completed?, piece_idx})
-  end
-
-  def init({root, files, piece_hashes, piece_size}) do
-    {:ok, State.new(root, files, piece_hashes, piece_size)}
-  end
-
-  def handle_call({:write_block, piece_idx, offset, data}, _from, state) do
+  def handle_call({:write_block, piece_idx, offset, data}, _from, info_hash) do
     results =
-      segments(state, piece_idx, offset, byte_size(data))
+      Store.segments(info_hash, piece_idx, offset, byte_size(data))
       |> Enum.map_reduce(0, fn {fpath, offset, size}, block_offset ->
         {{fpath, offset, size, block_offset}, size + block_offset} 
       end)
@@ -127,21 +35,21 @@ defmodule File.Manager do
         Torrent.FileHandler.Manager.write(fpath, offset, seg_data)
       end)
 
-    {reply, state} =
+    reply =
       case Enum.filter(results, &(&1 != :ok)) do
         [] ->
-          state = State.update_block(state, piece_idx, offset, byte_size(data), :written)
-          {:ok, state}
+          :ok = Store.update_status(info_hash, piece_idx, {offset, byte_size(data)}, :have)
+          :ok
         l  ->
-          {List.first(l), state}
+          List.first(l)
       end
 
-    {:reply, reply, state}
+    {:reply, reply, info_hash}
   end
 
-  def handle_call({:read_block, piece_idx, offset, length}, _from, state) do
+  def handle_call({:read_block, piece_idx, offset, length}, _from, info_hash) do
     results =
-      segments(state, piece_idx, offset, length)
+      Store.segments(info_hash, piece_idx, offset, length)
       |> Enum.map(fn {fpath, offset, size} -> 
         Torrent.FileHandler.Manager.read(fpath, offset, size)
       end)
@@ -158,57 +66,15 @@ defmodule File.Manager do
       l  -> List.first(l)
     end
 
-    {:reply, reply, state}
+    {:reply, reply, info_hash}
   end
 
-  def handle_call({:blocks_needed, piece_idx}, _from, %{blocks: blocks} = state) do
-    reply = Map.get(blocks, piece_idx)
-            |> Enum.filter(fn %{status: status} -> status == :need end)
-            |> Enum.map(fn %{offset: offset, size: size} -> {offset, size} end)
-    {:reply, reply, state}
-  end
-
-  def handle_call({:piece_completed?, piece_idx}, _from, %{blocks: blocks} = state) do
-    reply = Map.get(blocks, piece_idx)
-            |> Enum.filter(fn %{status: status} -> status != :verified end)
-            == []
-
-    {:reply, reply, state}
-  end
-
-  def terminate(_reason, %{root: root, files: files}) do
-    files
-    |> Enum.map(&elem(&1, 0))
-    |> Enum.map(fn fname -> Path.join(root, fname) end)
-    |> Enum.each(&(Torrent.FileHandler.Manager.close(&1)))
-  end
-
-  @spec segments(State.t, offset, size, [file]) :: [segment]
-  def segments(%{root: root, piece_size: piece_size, files: files}, piece_idx, offset, size) do
-    offset = (piece_idx * piece_size) + offset
-
-    files =
-      files
-      |> Enum.map_reduce(0, fn {fname, size}, offset -> 
-        {{fname, offset, size}, offset + size}
-      end)
-      |> elem(0)
-      |> Enum.filter(fn {_, off, fsize} -> offset <= off + fsize end)
-
-    calc_segments(offset - (List.first(files) |> elem(1)), size, files, [])
-    |> Enum.map(fn {fname, offset, size} ->
-      {Path.join(root, fname), offset, size}
-    end)
-  end
-
-  defp calc_segments(_offset, bytes_left, _files, acc) when bytes_left == 0 do
-    Enum.reverse(acc)
-  end
-  defp calc_segments(offset, bytes_left, [{fname, _, size} | rest], acc) do
-    seg_size = Enum.min([bytes_left, size - offset])
-    seg = {fname, offset, seg_size} 
-    calc_segments(0, bytes_left - seg_size, rest, [seg | acc])
-  end
+  #def terminate(_reason, %{root: root, files: files}) do
+    #files
+    #|> Enum.map(&elem(&1, 0))
+    #|> Enum.map(fn fname -> Path.join(root, fname) end)
+    #|> Enum.each(&(Torrent.FileHandler.Manager.close(&1)))
+  #end
 
   defp via(info_hash) do
     {:via, Registry, {File.Manager.Registry, info_hash}}
