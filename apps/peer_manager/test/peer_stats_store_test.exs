@@ -7,19 +7,19 @@ defmodule Peer.Stats.StoreTest do
     :ok = Store.reset
 
     info_hash = :crypto.strong_rand_bytes(20)
-    :ok = Store.register(info_hash)
+    :ok = Store.add(info_hash)
 
     %{info_hash: info_hash}
   end
 
-  test "register/1" do
+  test "add/1" do
     info_hash = :crypto.strong_rand_bytes(20)
-    Store.register(info_hash)
+    Store.add(info_hash)
     assert Store.stats(info_hash) == %Stats{}
   end
   
-  test "deregister/1", %{info_hash: info_hash} do
-    Store.deregister(info_hash)
+  test "remove/1", %{info_hash: info_hash} do
+    Store.remove(info_hash)
     assert Store.stats(info_hash) == nil
   end
 

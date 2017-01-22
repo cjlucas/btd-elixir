@@ -59,6 +59,6 @@ defmodule Peer.Manager do
   end
 
   def terminate(_reason, %{info_hash: h}) do
-    Peer.Stats.Store.deregister(h)
+    Peer.Stats.Store.remove(h)
   end
 end
