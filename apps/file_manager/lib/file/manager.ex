@@ -40,7 +40,7 @@ defmodule File.Manager do
       case Enum.filter(results, &(&1 != :ok)) do
         [] ->
           :ok = Store.update_status(info_hash, piece_idx, {offset, byte_size(data)}, :have)
-          if Store.piece_completed?(info_hash, piece_idx) do
+          if Store.piece_complete?(info_hash, piece_idx) do
             hash_check_piece(piece_idx, info_hash)
           else
             :ok

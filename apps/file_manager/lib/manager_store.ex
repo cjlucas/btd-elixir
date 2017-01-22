@@ -128,8 +128,7 @@ defmodule File.Manager.Store do
     end)
   end
 
-  # TODO: rename to piece_complete?
-  def piece_completed?(info_hash, piece_idx) do
+  def piece_complete?(info_hash, piece_idx) do
     get_piece(info_hash, piece_idx, fn blocks ->
       Enum.filter(blocks, fn {_, _, status} -> status == :need end) == []
     end)

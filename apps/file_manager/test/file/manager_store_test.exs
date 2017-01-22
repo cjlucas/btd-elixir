@@ -62,10 +62,10 @@ defmodule File.Manager.StoreTest do
     ]
   end
   
-  test "piece_completed?/2", %{info_hash: info_hash} do
-    refute Store.piece_completed?(info_hash, 0)
+  test "piece_complete?/2", %{info_hash: info_hash} do
+    refute Store.piece_complete?(info_hash, 0)
     :ok = Store.update_status(info_hash, 0, :have)
-    assert Store.piece_completed?(info_hash, 0)
+    assert Store.piece_complete?(info_hash, 0)
   end
 
   test "segments/4", %{info_hash: info_hash} do
