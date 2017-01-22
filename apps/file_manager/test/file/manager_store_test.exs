@@ -7,7 +7,7 @@ defmodule File.Manager.StoreTest do
 
     info_hash = :crypto.strong_rand_bytes(20)
     files = [{"1.mp3", 5}, {"2.mp3", 11}]
-    piece_hashes = 1..length(files)
+    piece_hashes = 1..6
                    |> Enum.map(fn _ -> :crypto.strong_rand_bytes(20) end)
 
     :ok = Store.add(info_hash, "/tmp/btd", files, piece_hashes, 3, 2)
@@ -86,5 +86,9 @@ defmodule File.Manager.StoreTest do
       {"/tmp/btd/1.mp3", 5},
       {"/tmp/btd/2.mp3", 11}
     ]
+  end
+
+  test "piece_hash/2", %{info_hash: info_hash, piece_hashes: hashes} do
+    assert 0..5 |> Enum.map(&Store.piece_hash(info_hash, &1)) == hashes
   end
 end

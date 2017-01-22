@@ -134,6 +134,12 @@ defmodule File.Manager.Store do
     end)
   end
 
+  def piece_hash(info_hash, piece_idx) do
+    get_entry(info_hash, fn %{piece_hashes: hashes} ->
+      Enum.at(hashes, piece_idx)
+    end)
+  end
+
   defp get_entry(info_hash, fun) do
     Agent.get(__MODULE__, &(Map.get(&1, info_hash) |> fun.()))
   end
