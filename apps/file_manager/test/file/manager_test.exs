@@ -1,12 +1,23 @@
 defmodule File.ManagerTest do
+  alias File.Manager.Store
   use ExUnit.Case
 
   setup_all do
     files = [{"1.mp3", 5}, {"2.mp3", 11}]
-    :ok = File.Manager.Store.add(<<>>, "/tmp/btd", files, [], 3, 3)
+    pieces = [
+      <<1, 2, 3>>,
+      <<4, 5, 6>>,
+      <<7, 8, 9>>,
+      <<10, 11, 12>>,
+      <<13, 14, 15>>,
+      <<16>>
+    ]
+
+    hashes = Enum.map(pieces, &:crypto.hash(:sha, &1))
+    :ok = Store.add(<<>>, "/tmp/btd", files, hashes, 3, 3)
 
     on_exit fn ->
-      File.Manager.Store.remove(<<>>)
+      Store.remove(<<>>)
     end
   end
 
@@ -34,14 +45,14 @@ defmodule File.ManagerTest do
     end
   
     test "block in the middle of a file" do
-      assert File.Manager.write_block(<<>>, 3, 0, <<1, 2, 3>>) == :ok
-      assert File.read!("/tmp/btd/2.mp3") == <<0, 0, 0, 0, 1, 2, 3>>
+      assert File.Manager.write_block(<<>>, 3, 0, <<10, 11, 12>>) == :ok
+      assert File.read!("/tmp/btd/2.mp3") == <<0, 0, 0, 0, 10, 11, 12>>
     end
    
     test "block spanning two files" do
-      assert File.Manager.write_block(<<>>, 1, 0, <<1, 2, 3>>) == :ok
-      assert File.read!("/tmp/btd/1.mp3") == <<0, 0, 0, 1, 2>>
-      assert File.read!("/tmp/btd/2.mp3") == <<3>>
+      assert File.Manager.write_block(<<>>, 1, 0, <<4, 5, 6>>) == :ok
+      assert File.read!("/tmp/btd/1.mp3") == <<0, 0, 0, 4, 5>>
+      assert File.read!("/tmp/btd/2.mp3") == <<6>>
     end
    
     test "write all pieces" do
@@ -55,6 +66,16 @@ defmodule File.ManagerTest do
       assert File.read!("/tmp/btd/2.mp3") == <<6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16>>
     end
 
+    test "piece completion with good data" do
+      assert File.Manager.write_block(<<>>, 0, 0, <<1, 2, 3>>) == :ok
+      assert Store.blocks(<<>>, 0) |> Enum.map(&elem(&1, 2)) == [:verified]
+    end
+
+    test "piece completion with bad data" do
+      assert File.Manager.write_block(<<>>, 0, 0, <<1, 2, 4>>) == {:error, :hash_check_failed}
+      assert Store.blocks(<<>>, 0) |> Enum.map(&elem(&1, 2)) == [:need]
+    end
+    
     test "invalid permissions" do
       File.chmod("/tmp/btd", 0o400)
       assert File.Manager.write_block(<<>>, 0, 0, <<1, 2, 3>>) == {:error, :eacces}
