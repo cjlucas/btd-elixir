@@ -1,5 +1,7 @@
 :observer.start
 
+Process.sleep(5_000)
+
 info_hash = <<4, 3, 251, 71, 40, 189, 120, 143, 188, 182, 126, 135, 214, 254, 178, 65, 239, 56, 199, 90>>
 url = "http://torrent.ubuntu.com:6969/announce"
 
@@ -10,6 +12,14 @@ IO.puts("num pieces: #{length(torrent.pieces)}")
 
 {:ok, _} = Torrent.Registry.register(torrent)
 
+files = torrent.files |> Enum.map(fn %{path: path, size: size} -> {path, size} end)
+:ok = FileManager.register(info_hash,
+                           "/Users/chris/Downloads",
+                           files,
+                           torrent.pieces,
+                           torrent.piece_length)
+
+Peer.Stats.Store.add(info_hash)
 Peer.Manager.Supervisor.start_child(info_hash)
 
 TrackerManager.subscribe(:received_response)
@@ -20,7 +30,7 @@ TrackerManager.subscribe(:received_response)
 receive do
   {:received_response, info_hash, url, resp} ->
     host = "192.168.1.11"
-    port = 64155
+    port = 64339
     IO.puts("host: #{host} port: #{port}")
     Peer.Handshake.Supervisor.connect(host, port, info_hash)
     Process.sleep(2 * 60_000)

@@ -40,7 +40,6 @@ defmodule Peer.Connection do
 
     case process_buffer(buf) do
       {:ok, msg, rest} ->
-        Logger.debug("Received message: #{inspect msg}")
         Peer.EventManager.received_message(hash, {self(), msg})
         handle_msg(msg, %{state | sock: sock, buffer: rest})
       {:error, _} ->
@@ -60,7 +59,6 @@ defmodule Peer.Connection do
   end
 
   def handle_cast({:send_msg, msg}, %{info_hash: hash, sock: sock} = state) do
-    Logger.debug("Sending message: #{inspect msg}")
     data = Bittorrent.Message.encode(msg)
     case Peer.Socket.send(sock, [<<byte_size(data)::32>>, data]) do
       {:ok, sock} ->

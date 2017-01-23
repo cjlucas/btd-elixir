@@ -6,7 +6,7 @@ defmodule Peer.Manager do
   @name __MODULE__
 
   defmodule State do
-    defstruct info_hash: <<>>
+    defstruct info_hash: <<>>, pieces: []
   end
 
   def start_link(info_hash) do
@@ -16,7 +16,16 @@ defmodule Peer.Manager do
   def init(info_hash) do
     Registry.register(Peer.Manager.Registry, info_hash, [])
     Peer.EventManager.register(info_hash)
-    {:ok, %State{info_hash: info_hash}}
+
+    pieces =
+      FileManager.pieces(info_hash)
+      |> Enum.flat_map_reduce(0, fn blocks, i ->
+        blocks = Enum.map(blocks, fn {offset, size, _} -> {i, offset, size} end)
+        {blocks, i + 1}
+      end)
+      |> elem(0)
+
+    {:ok, %State{info_hash: info_hash, pieces: pieces}}
   end
 
   def handle_info({:received_connection, _conn}, state) do
@@ -28,18 +37,28 @@ defmodule Peer.Manager do
     {:noreply, state}
   end
 
-  def handle_info({:received_message, conn, %Unchoke{}}, state) do
-    Peer.Connection.send_msg(conn, %Request{index: 0, begin: 0, length: 16384})
-    {:noreply, state}
+  def handle_info({:received_message, conn, %Unchoke{}}, %{pieces: [{index, begin, length} | rest]} = state) do
+    Peer.Connection.send_msg(conn, %Request{index: index, begin: begin, length: length})
+    {:noreply, %{state | pieces: rest}}
   end
 
-  def handle_info({:received_message, _conn, %Piece{block: block}}, %{info_hash: h} = state) do
+  def handle_info({:received_message, conn, %Piece{index: index, begin: begin, block: block}}, %{info_hash: h, pieces: pieces} = state) do
+    pieces =
+      case pieces do
+        [{index, begin, length} | rest] ->
+          Peer.Connection.send_msg(conn, %Request{index: index, begin: begin, length: length})
+          rest
+        [] ->
+          []
+      end
+
+    FileManager.write_block(h, index, begin, block)
     Peer.Stats.Store.incr_downloaded(h, byte_size(block))
-    {:noreply, state}
+
+    {:noreply, %{state | pieces: pieces}}
   end
 
   def handle_info({:received_message, _conn, msg}, state) do
-    Logger.debug("Received unhandled message: #{inspect msg}")
     {:noreply, state}
   end
 
@@ -49,7 +68,6 @@ defmodule Peer.Manager do
   end
 
   def handle_info({:sent_message, _conn, msg}, state) do
-    Logger.debug("Sent unhandled message: #{inspect msg}")
     {:noreply, state}
   end
 

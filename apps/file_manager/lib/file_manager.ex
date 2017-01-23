@@ -32,6 +32,10 @@ defmodule FileManager do
          :ok <- Supervisor.delete_child(File.Manager.Supervisor, info_hash), do: :ok
   end
 
+  def pieces(info_hash) do
+    File.Manager.Store.pieces(info_hash)
+  end
+
   def write_block(info_hash, piece_idx, offset, data) do
     File.Manager.write_block(info_hash, piece_idx, offset, data)
   end
