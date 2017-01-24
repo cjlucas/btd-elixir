@@ -5,8 +5,8 @@ defmodule Peer.Connection.Supervisor do
     Supervisor.start_link(__MODULE__, :ok, name: __MODULE__)
   end
 
-  def start_child(info_hash, sock) do
-    Supervisor.start_child(__MODULE__, [info_hash, sock])
+  def start_child(info_hash, sock, initial_data) do
+    Supervisor.start_child(__MODULE__, [info_hash, sock, initial_data])
   end
 
   def init(:ok) do
