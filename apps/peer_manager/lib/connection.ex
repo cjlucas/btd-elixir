@@ -1,17 +1,35 @@
 defmodule Peer.Connection.ReadHandler do
-  def loop(s, pid) do
+  def loop(s, pid, initial_data) do
     receive do
       read_amnt when is_integer(read_amnt) ->
-        case :gen_tcp.recv(s, read_amnt) do
-          {:ok, data} ->
+        case read(read_amnt, s, initial_data) do
+          {:ok, data, rem_data} ->
             send(pid, {:read_data, data})
+            loop(s, pid, rem_data)
           {:error, reason} ->
             send(pid, {:read_error, reason})
+            loop(s, pid, initial_data)
         end
-
-        loop(s, pid)
       _ ->
         raise "Received unexpected message"
+    end
+  end
+
+  def read(n, s, initial_data) when byte_size(initial_data) == 0 do
+    case :gen_tcp.recv(s, n) do
+      {:ok, data}      -> {:ok, data, <<>>}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+  def read(n, _s, initial_data) when byte_size(initial_data) >= n do
+    <<data::bytes-size(n), rest::binary>> = initial_data
+    {:ok, data, rest}
+  end
+  def read(n, s, initial_data) when byte_size(initial_data) < n do
+    with {:ok, buf_data, _}  <- read(byte_size(initial_data), s, initial_data),
+         {:ok, sock_data, _} <- read(n - byte_size(initial_data), s, <<>>)
+    do
+      {:ok, buf_data <> sock_data, <<>>}
     end
   end
 end
@@ -27,7 +45,6 @@ defmodule Peer.Connection do
 
     defstruct info_hash: <<>>,
       sock: nil,
-      initial_data: nil,
       bitfield: nil,
       choked: true,
       interested: false,
@@ -57,39 +74,12 @@ defmodule Peer.Connection do
 
     pid = self()
     read_pid = spawn_link(fn ->
-      Peer.Connection.ReadHandler.loop(s,pid)
+      Peer.Connection.ReadHandler.loop(s,pid, initial_data)
     end)
 
-    {sock, initial_data} = Peer.Socket.decrypt(sock, initial_data)
+    send(read_pid, 4)
 
-    data = case process_buffer(initial_data) do
-      {:ok, msg, rest} ->
-        IO.puts("GOT MSG #{inspect msg}")
-        Peer.EventManager.received_message(info_hash, {self(), msg})
-        rest
-      {:error, reason} ->
-        IO.puts("DIDNT GET MSG")
-        initial_data
-    end
-
-    {sock, read_state, data} =
-      if byte_size(data) >= 4 do
-        <<len::32, data::binary>> = data
-        IO.puts("WTFHERE #{len} #{byte_size(data)}")
-        send(read_pid, len - byte_size(data))
-        {sock, :awaiting_payload, data}
-      else
-        IO.puts("OMGHERE #{byte_size(data)}")
-        send(read_pid, 4)
-        {sock, :awaiting_length, nil}
-      end
-
-
-    {:ok, %State{info_hash: info_hash, sock: sock, read_state: read_state, initial_data: data, read_pid: read_pid}}
-  end
-
-  def handle_info({:read_data, data}, %{initial_data: buf} = state) when is_binary(buf) do
-    handle_info({:read_data, buf <> data}, %{state | initial_data: nil})
+    {:ok, %State{info_hash: info_hash, sock: sock, read_pid: read_pid}}
   end
 
   def handle_info({:read_data, data}, %{read_state: st, sock: sock, read_pid: pid} = state)
