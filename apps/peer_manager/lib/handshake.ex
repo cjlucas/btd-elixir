@@ -261,7 +261,7 @@ defmodule Peer.Handshake do
       Logger.debug(inspect buf)
       rest = sync(vc, iolist_to_binary(buf))
       Logger.debug("rest = #{inspect rest}")
-      if byte_size(rest) > 0 do
+      if byte_size(rest) != iolist_size(buf) do
         {:next_state, %{info | buffer: [rest]}}
       else
         :no_change
