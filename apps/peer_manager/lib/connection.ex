@@ -85,7 +85,7 @@ defmodule Peer.Connection do
       end
 
 
-    {:ok, %State{info_hash: info_hash, sock: sock, initial_data: data, read_pid: read_pid}}
+    {:ok, %State{info_hash: info_hash, sock: sock, read_state: read_state, initial_data: data, read_pid: read_pid}}
   end
 
   def handle_info({:read_data, data}, %{initial_data: buf} = state) when is_binary(buf) do
