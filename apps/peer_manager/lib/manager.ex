@@ -6,7 +6,7 @@ defmodule Peer.Manager do
   @name __MODULE__
 
   defmodule State do
-    defstruct info_hash: <<>>, pieces: [], start: 0
+    defstruct info_hash: <<>>, pieces: []
   end
 
   def start_link(info_hash) do
@@ -34,7 +34,7 @@ defmodule Peer.Manager do
 
   def handle_info({:received_message, conn, %Bitfield{}}, state) do
     Peer.Connection.send_msg(conn, %Interested{})
-    {:noreply, %{state | start: System.monotonic_time(:second)}}
+    {:noreply, state}
   end
 
   def handle_info({:received_message, conn, %Unchoke{}}, %{pieces: [{index, begin, length} | rest]} = state) do
@@ -49,7 +49,6 @@ defmodule Peer.Manager do
           Peer.Connection.send_msg(conn, %Request{index: index, begin: begin, length: length})
           rest
         [] ->
-          IO.puts("NO MORE PIECES #{System.monotonic_time(:second) - state.start}")
           []
       end
 
