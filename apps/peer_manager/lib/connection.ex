@@ -87,16 +87,12 @@ defmodule Peer.Connection do
     {sock, <<len::32>>} = Peer.Socket.decrypt(sock, data)
     send(pid, len)
 
-    #IO.puts("GOT LEN #{len}")
-
     {:noreply, %{state | read_state: :awaiting_payload, sock: sock}}
   end
 
   def handle_info({:read_data, data}, %{read_state: st, info_hash: hash, sock: sock, read_pid: pid} = state)
       when st == :awaiting_payload do
     {sock, data} = Peer.Socket.decrypt(sock, data)
-
-    #IO.puts("GOT DATA #{inspect data}")
 
     send(pid, 4)
 
