@@ -110,7 +110,7 @@ defmodule Peer.Connection do
     end
   end
 
-  def handle_info({:tcp_closed, _sock}, state) do
+  def handle_info({:read_error, _reason}, state) do
     {:stop, :normal, state}
   end
 
