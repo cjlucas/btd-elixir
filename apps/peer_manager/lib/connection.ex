@@ -96,12 +96,14 @@ defmodule Peer.Connection do
 
     send(pid, 4)
 
+    state = %{state | read_state: :awaiting_length, sock: sock}
+
     case Bittorrent.Message.parse(data) do
       {:ok, msg} ->
         Peer.EventManager.received_message(hash, {self(), msg})
-        handle_msg(msg, %{state | read_state: :awaiting_length, sock: sock})
+        handle_msg(msg, state)
       {:error, _} ->
-        {:noreply, %{state | read_state: :awaiting_length, sock: sock}}
+        {:noreply, state}
     end
   end
 
@@ -130,20 +132,6 @@ defmodule Peer.Connection do
 
   def terminate(_reason, %{sock: sock}) do
     Peer.Socket.close(sock)
-  end
-
-  defp process_buffer(<<0::32, rest::binary>>), do: process_buffer(rest)
-  defp process_buffer(<<len::32, rest::binary>>) when byte_size(rest) >= len do
-    <<payload::bytes-size(len), rest::binary>> = rest
-    case Bittorrent.Message.parse(payload) do
-      {:ok, msg} ->
-        {:ok, msg, rest}
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-  defp process_buffer(_buf) do
-    {:error, :insufficient_data}
   end
 
   defp handle_msg(%Bitfield{bitfield: bits}, state) do
