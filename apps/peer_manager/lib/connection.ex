@@ -98,7 +98,6 @@ defmodule Peer.Connection do
 
     case Bittorrent.Message.parse(data) do
       {:ok, msg} ->
-        #IO.puts("GOT MSG #{inspect msg}")
         Peer.EventManager.received_message(hash, {self(), msg})
         handle_msg(msg, %{state | read_state: :awaiting_length, sock: sock})
       {:error, _} ->
