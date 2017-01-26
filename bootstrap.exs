@@ -1,6 +1,5 @@
-:observer.start
-
-Process.sleep(5_000)
+#:observer.start
+#Process.sleep(5_000)
 
 info_hash = <<4, 3, 251, 71, 40, 189, 120, 143, 188, 182, 126, 135, 214, 254, 178, 65, 239, 56, 199, 90>>
 url = "http://torrent.ubuntu.com:6969/announce"
@@ -20,7 +19,7 @@ files = torrent.files |> Enum.map(fn %{path: path, size: size} -> {path, size} e
                            torrent.piece_length)
 
 Peer.Stats.Store.add(info_hash)
-Peer.Manager.Supervisor.start_child(info_hash)
+{:ok, _} = Peer.Manager.Supervisor.start_child(info_hash)
 
 TrackerManager.subscribe(:received_response)
 :ok = Tracker.Manager.register(info_hash, info_hash, [[url]])
@@ -29,11 +28,11 @@ TrackerManager.subscribe(:received_response)
 
 receive do
   {:received_response, info_hash, url, resp} ->
-    host = "192.168.1.11"
-    port = 64339
+    host = System.argv |> Enum.at(0)
+    port = System.argv |> Enum.at(1) |> String.to_integer
     IO.puts("host: #{host} port: #{port}")
     Peer.Handshake.Supervisor.connect(host, port, info_hash)
-    Process.sleep(2 * 60_000)
+    Process.sleep(:infinity)
 after
   5000 -> IO.puts("timed out")
 end
