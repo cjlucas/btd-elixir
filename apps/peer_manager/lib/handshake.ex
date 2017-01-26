@@ -96,7 +96,7 @@ defmodule Peer.Handshake do
   def handle_info(:timeout, %InitialState{lsock: lsock} = state) when not is_nil(lsock) do
     case :gen_tcp.accept(lsock) do
       {:ok, sock} ->
-        :inet.setopts(sock, [active: true])
+        :inet.setopts(sock, [active: :once])
         conn = %Peer.Socket{sock: sock}
         Peer.Handshake.Supervisor.listen(lsock)
         {:noreply, %State{incoming: true, states: @incoming_flow, conn: conn}}
@@ -111,7 +111,7 @@ defmodule Peer.Handshake do
            |> Enum.map(&String.to_integer/1)
            |> List.to_tuple
 
-    case :gen_tcp.connect(host, port, [:binary, active: true]) do
+    case :gen_tcp.connect(host, port, [:binary, active: :once]) do
       {:ok, sock} ->
         conn = %Peer.Socket{sock: sock}
         trigger_handler()
@@ -146,13 +146,14 @@ defmodule Peer.Handshake do
         {:stop, :kill, state}
     end
   end
-  defp dispatch_handler(%{states: [cur_state | rem_states]} = state) do
+  defp dispatch_handler(%{conn: %{sock: s}, states: [cur_state | rem_states]} = state) do
     Logger.debug("cur_state = #{cur_state}")
     case handle_state(cur_state, state) do
       {:next_state, info} ->
         trigger_handler() # queue the next state handler
         {:noreply, %{info | states: rem_states}}
-      :no_change ->
+      :need_data ->
+        :inet.setopts(s, [active: :once])
         {:noreply, state}
       {:error, reason} ->
         # TODO: proper error handling
@@ -178,7 +179,7 @@ defmodule Peer.Handshake do
       << pubkey :: bytes-size(96), rest :: binary >> = iolist_to_binary(buf)
       {:next_state, %{info | pubkey: pubkey, buffer: [rest]}}
     else
-      :no_change
+      :need_data
     end
   end
 
@@ -206,7 +207,7 @@ defmodule Peer.Handshake do
       buf = iolist_to_binary(buf)
       synced_buf = sync(req1(s), buf)
       if buf == synced_buf do
-        :no_change
+        :need_data
       else
         # FIXME: we're not guaranteed at least 20 bytes here
         <<
@@ -225,7 +226,7 @@ defmodule Peer.Handshake do
         end
       end
     else
-      :no_change
+      :need_data
     end
   end
 
@@ -264,10 +265,10 @@ defmodule Peer.Handshake do
       if byte_size(rest) != iolist_size(buf) do
         {:next_state, %{info | buffer: [rest]}}
       else
-        :no_change
+        :need_data
       end
     else
-      :no_change
+      :need_data
     end
   end
 
@@ -278,7 +279,7 @@ defmodule Peer.Handshake do
       Logger.debug("crypto_select: #{inspect cs}")
       {:next_state, %{info | conn: conn, crypto_select: cs, buffer: [rest]}}
     else
-      :no_change
+      :need_data
     end
   end
 
@@ -289,7 +290,7 @@ defmodule Peer.Handshake do
       Logger.debug("cp = #{inspect cp}")
       {:next_state, %{info | conn: conn, crypto_select: cp, buffer: [rest]}}
     else
-      :no_change
+      :need_data
     end
   end
 
@@ -303,7 +304,7 @@ defmodule Peer.Handshake do
   end
 
   defp handle_state(:recv_pad, %{buffer: buf}) when byte_size(buf) < 2 do
-    :no_change
+    :need_data
   end
   defp handle_state(:recv_pad, %{conn: conn, buffer: buf} = info) do
     Logger.debug(iolist_size(buf))
@@ -315,7 +316,7 @@ defmodule Peer.Handshake do
         {conn, _} = Peer.Socket.decrypt(conn, pad)
         {:next_state, %{info | conn: conn, buffer: [rest]}}
       _ ->
-        :no_change
+        :need_data
     end
   end
 
@@ -337,7 +338,7 @@ defmodule Peer.Handshake do
       Logger.debug("recv_ialen (ialen = #{ialen})")
       {:next_state, %{info | conn: conn, buffer: [rest]}}
     else
-      :no_change
+      :need_data
     end
   end
 
@@ -382,7 +383,7 @@ defmodule Peer.Handshake do
         {:error, :bad_pstrlen}
       end
     else
-      :no_change
+      :need_data
     end
   end
 
@@ -396,7 +397,7 @@ defmodule Peer.Handshake do
         {:error, :bad_pstr}
       end
     else
-      :no_change
+      :need_data
     end
   end
 
@@ -406,7 +407,7 @@ defmodule Peer.Handshake do
       {conn, _} = Peer.Socket.decrypt(conn, reserved_enc)
       {:next_state, %{info | conn: conn, buffer: [rest]}}
     else
-      :no_change
+      :need_data
     end
   end
 
@@ -421,7 +422,7 @@ defmodule Peer.Handshake do
         {:error, :bad_info_hash}
       end
     else
-      :no_change
+      :need_data
     end
   end
 
@@ -431,7 +432,7 @@ defmodule Peer.Handshake do
       {conn, peer_id} = Peer.Socket.decrypt(conn, peer_id_enc)
       {:next_state, %{info | conn: conn, peer_id: peer_id, buffer: [rest]}}
     else
-      :no_change
+      :need_data
     end
   end
 
