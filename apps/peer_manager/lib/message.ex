@@ -52,6 +52,7 @@ defmodule Bittorrent.Message do
     {:port, 9},
   ]
 
+  def parse(<<id, _::binary>>) when id > 9, do: {:error, :unknown_id}
   def parse(<< id, payload :: binary >>) do
     List.keyfind(@message_registry, id, 1)
     |> elem(0)
