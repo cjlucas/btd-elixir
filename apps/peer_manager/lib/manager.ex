@@ -29,7 +29,11 @@ defmodule Peer.Manager do
     {:ok, %State{info_hash: info_hash, pieces: pieces}}
   end
 
-  def handle_info({:received_connection, _conn}, state) do
+  def handle_info({:peer_connected, _conn}, state) do
+    {:noreply, state}
+  end
+
+  def handle_info({:peer_disconnected, _conn}, state) do
     {:noreply, state}
   end
 

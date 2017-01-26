@@ -70,7 +70,7 @@ defmodule Peer.Connection do
     {:ok, {host, port}} = :inet.peername(sock.sock)
     host = host |> Tuple.to_list |> Enum.join(".")
     Peer.Registry.register(info_hash, {host, port})
-    Peer.EventManager.received_connection(info_hash, self())
+    Peer.EventManager.peer_connected(info_hash, self())
 
     pid = self()
     read_pid = spawn_link(fn ->
@@ -140,8 +140,9 @@ defmodule Peer.Connection do
     end
   end
 
-  def terminate(_reason, %{sock: sock}) do
+  def terminate(_reason, %{info_hash: info_hash, sock: sock}) do
     Logger.debug("In terminate")
+    Peer.EventManager.peer_disconnected(info_hash, self())
     Peer.Socket.close(sock)
   end
 
