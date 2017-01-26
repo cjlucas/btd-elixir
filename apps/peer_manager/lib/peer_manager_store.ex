@@ -44,24 +44,11 @@ defmodule Peer.Manager.Store do
     end)
   end
 
-  def lookup_peer_id(:info_hash, hash) do
+  def lookup_peer_id(info_hash) do
     Agent.get(__MODULE__, fn %{stats: stats} ->
-      case Map.get(stats, hash) do
+      case Map.get(stats, info_hash) do
         %{peer_id: peer_id} -> peer_id
         nil                 -> nil
-      end
-    end)
-  end
-
-  def lookup_peer_id(:skey_hash, hash) do
-    Agent.get(__MODULE__, fn %{stats: stats, skey_map: skey_map} ->
-      case Map.get(skey_map, hash) do
-        nil -> nil
-        info_hash ->
-          case Map.get(stats, info_hash) do
-            %{peer_id: peer_id} -> peer_id
-            nil                 -> nil
-          end
       end
     end)
   end

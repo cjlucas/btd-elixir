@@ -27,14 +27,9 @@ defmodule Peer.Manager.StoreTest do
     assert Store.resolve_info_hash(<<>>) == nil
   end
 
-  test "lookup_peer_id/1 with :info_hash", %{info_hash: info_hash} do
-    assert is_binary(Store.lookup_peer_id(:info_hash, info_hash))
-    assert is_nil(Store.lookup_peer_id(:info_hash, <<>>))
-  end
-
-  test "lookup_peer_id/1 with :skey_hash", %{skey_hash: skey_hash} do
-    assert is_binary(Store.lookup_peer_id(:skey_hash, skey_hash))
-    assert is_nil(Store.lookup_peer_id(:skey_hash, <<>>))
+  test "lookup_peer_id/1", %{info_hash: info_hash} do
+    assert is_binary(Store.lookup_peer_id(info_hash))
+    assert is_nil(Store.lookup_peer_id(<<>>))
   end
 
   test "incr_uploaded/2", %{info_hash: info_hash} do
