@@ -1,12 +1,11 @@
-defmodule Peer.Stats do
-  defstruct uploaded: 0, downloaded: 0
-end
-
 defmodule Peer.Manager.Store do
-  alias Peer.Stats
+
+  defmodule Info do
+    defstruct skey_hash: <<>>, peer_id: <<>>, uploaded: 0, downloaded: 0
+  end
 
   defmodule State do
-    defstruct stats: %{}
+    defstruct stats: %{}, skey_map: %{}
   end
 
   def start_link do
@@ -18,20 +17,63 @@ defmodule Peer.Manager.Store do
   end
 
   def add(info_hash) do
-    Agent.update(__MODULE__, fn %{stats: stats} = state ->
-      %{state | stats: Map.put(stats, info_hash, %Stats{})}
+    Agent.update(__MODULE__, fn %{stats: stats, skey_map: skey_map} = state ->
+      skey_hash = Peer.HandshakeUtils.req2(info_hash)
+      info = %Info{
+        skey_hash: skey_hash,
+        peer_id: :crypto.strong_rand_bytes(20)
+      }
+
+      %{state |
+        stats: Map.put(stats, info_hash, info),
+        skey_map: Map.put(skey_map, skey_hash, info_hash)}
     end)
   end
 
   def remove(info_hash) do
-    Agent.update(__MODULE__, fn %{stats: stats} = state ->
-      %{state | stats: Map.delete(stats, info_hash)}
+    Agent.update(__MODULE__, fn %{stats: stats, skey_map: skey_map} = state ->
+      %{state |
+        stats: Map.delete(stats, info_hash),
+        skey_map: Map.delete(skey_map, Peer.HandshakeUtils.req2(info_hash))}
+    end)
+  end
+
+  def resolve_info_hash(skey_hash) do
+    Agent.get(__MODULE__, fn %{skey_map: map} ->
+      Map.get(map, skey_hash)
+    end)
+  end
+
+  def lookup_peer_id(:info_hash, hash) do
+    Agent.get(__MODULE__, fn %{stats: stats} ->
+      case Map.get(stats, hash) do
+        %{peer_id: peer_id} -> peer_id
+        nil                 -> nil
+      end
+    end)
+  end
+
+  def lookup_peer_id(:skey_hash, hash) do
+    Agent.get(__MODULE__, fn %{stats: stats, skey_map: skey_map} ->
+      case Map.get(skey_map, hash) do
+        nil -> nil
+        info_hash ->
+          case Map.get(stats, info_hash) do
+            %{peer_id: peer_id} -> peer_id
+            nil                 -> nil
+          end
+      end
     end)
   end
 
   def stats(info_hash) do
     Agent.get(__MODULE__, fn %{stats: stats} ->
-      Map.get(stats, info_hash)
+      case Map.get(stats, info_hash) do
+        %{uploaded: up, downloaded: down} ->
+          [uploaded: up, downloaded: down]
+        nil ->
+          nil
+      end
     end)
   end
 
@@ -49,7 +91,7 @@ defmodule Peer.Manager.Store do
         Map.update!(stat, key, &(&1 + amnt))
       end)
 
-      {Map.get(stats, info_hash), %{state | stats: stats}}
+      {:ok, %{state | stats: stats}}
     end)
   end
 end
