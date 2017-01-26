@@ -2,7 +2,7 @@ defmodule Peer.Stats do
   defstruct uploaded: 0, downloaded: 0
 end
 
-defmodule Peer.Stats.Store do
+defmodule Peer.Manager.Store do
   alias Peer.Stats
 
   defmodule State do

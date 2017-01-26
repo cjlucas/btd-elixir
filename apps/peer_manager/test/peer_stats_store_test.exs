@@ -1,6 +1,6 @@
-defmodule Peer.Stats.StoreTest do
+defmodule Peer.Manager.StoreTest do
   alias Peer.Stats
-  alias Peer.Stats.Store
+  alias Peer.Manager.Store
   use ExUnit.Case
 
   setup do

@@ -18,7 +18,7 @@ files = torrent.files |> Enum.map(fn %{path: path, size: size} -> {path, size} e
                            torrent.pieces,
                            torrent.piece_length)
 
-Peer.Stats.Store.add(info_hash)
+Peer.Manager.Store.add(info_hash)
 {:ok, _} = Peer.Manager.Supervisor.start_child(info_hash)
 
 TrackerManager.subscribe(:received_response)

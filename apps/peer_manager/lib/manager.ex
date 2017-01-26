@@ -55,7 +55,7 @@ defmodule Peer.Manager do
       end
 
     FileManager.write_block(h, index, begin, block)
-    Peer.Stats.Store.incr_downloaded(h, byte_size(block))
+    Peer.Manager.Store.incr_downloaded(h, byte_size(block))
 
     {:noreply, %{state | pieces: pieces}}
   end
@@ -65,7 +65,7 @@ defmodule Peer.Manager do
   end
 
   def handle_info({:sent_message, _conn, %Piece{block: block}}, %{info_hash: h} = state) do
-    Peer.Stats.Store.incr_uploaded(h, byte_size(block))
+    Peer.Manager.Store.incr_uploaded(h, byte_size(block))
     {:noreply, state}
   end
 
@@ -85,7 +85,7 @@ defmodule Peer.Manager do
   end
 
   def terminate(_reason, %{info_hash: h}) do
-    Peer.Stats.Store.remove(h)
+    Peer.Manager.Store.remove(h)
   end
 
   defp dispatch_msg(info_hash, msg) do
