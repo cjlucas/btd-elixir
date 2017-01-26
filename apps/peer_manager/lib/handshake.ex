@@ -4,8 +4,6 @@ defmodule Peer.Handshake do
   use GenServer
   require Logger
 
-  @torrent_info_provider Application.fetch_env!(:peer_manager, :torrent_info_provider)
-
   @name __MODULE__
 
   @vc <<0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00>>
@@ -216,12 +214,11 @@ defmodule Peer.Handshake do
         >> = synced_buf
 
         skey_hash = bin_xor(req23buf, req3(s))
-        case @torrent_info_provider.resolve_info_hash(skey_hash) do
-          {:ok, info_hash} ->
+        case Peer.Manager.Store.resolve_info_hash(skey_hash) do
+          info_hash when is_binary(info_hash) ->
             Logger.debug("GOT TORRENT! #{inspect info_hash}")
             {:next_state, %{info | info_hash: info_hash, buffer: [rest]}}
-          {:error, reason} ->
-            Logger.debug("Resolve info hash failed (reason = #{reason})")
+          nil ->
             {:error, :resolve_info_hash_failed}
         end
       end
@@ -353,8 +350,8 @@ defmodule Peer.Handshake do
   end
 
   defp handle_state(:send_handshake, %{conn: conn, info_hash: info_hash} = info) do
-    case @torrent_info_provider.resolve_peer_id(info_hash) do
-      {:ok, peer_id} ->
+    case Peer.Manager.Store.lookup_peer_id(info_hash) do
+      peer_id when is_binary(peer_id) ->
         payload = [
           <<@pstrlen::8>>,
           @pstr,
@@ -368,8 +365,8 @@ defmodule Peer.Handshake do
           {:error, reason} ->
             {:error, reason}
         end
-      {:error, reason} ->
-        {:error, reason}
+      nil ->
+        {:error, :unknown_peer_id}
     end
   end
 
