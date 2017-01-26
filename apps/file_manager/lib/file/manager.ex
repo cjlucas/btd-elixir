@@ -73,6 +73,7 @@ defmodule File.Manager do
         {ret, status} =
           case :crypto.hash(:sha, data) do
             ^expected_hash ->
+              File.EventManager.piece_completed(info_hash, piece_idx)
               {:ok, :verified}
             actual ->
               Logger.debug("Hash check failed actual: #{inspect actual}")

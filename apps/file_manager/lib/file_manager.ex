@@ -9,6 +9,7 @@ defmodule FileManager do
     import Supervisor.Spec, warn: false
 
     children = [
+      supervisor(File.EventManager, []),
       supervisor(File.Manager.Supervisor, []),
       supervisor(Registry, [:unique, File.Manager.Registry], id: File.Manager.Registry),
       supervisor(Torrent.FileHandler.Supervisor, []),
@@ -42,5 +43,9 @@ defmodule FileManager do
 
   def read_block(info_hash, piece_idx, offset, size) do
     File.Manager.read_block(info_hash, piece_idx, offset, size)
+  end
+
+  def piece_complete?(info_hash, piece_idx) do
+    File.Manager.Store.piece_complete?(info_hash, piece_idx)
   end
 end

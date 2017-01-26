@@ -1,4 +1,4 @@
-defmodule File.EventManger do
+defmodule File.EventManager do
   def start_link do
     Registry.start_link(:duplicate, __MODULE__)
   end

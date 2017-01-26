@@ -9,6 +9,6 @@ defmodule Peer.Registry do
 
   def lookup(info_hash) do
     Registry.lookup(__MODULE__, info_hash)
-    |> Enum.map(fn entry -> elem(entry, 1) end)
+    |> Enum.map(fn entry -> elem(entry, 0) end)
   end
 end

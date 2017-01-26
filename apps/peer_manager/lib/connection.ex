@@ -85,9 +85,15 @@ defmodule Peer.Connection do
   def handle_info({:read_data, data}, %{read_state: st, sock: sock, read_pid: pid} = state)
       when st == :awaiting_length do
     {sock, <<len::32>>} = Peer.Socket.decrypt(sock, data)
+
+    {read_state, len} = case len do
+      0 -> {:awaiting_length, 4}
+      _ -> {:awaiting_payload, len}
+    end
+
     send(pid, len)
 
-    {:noreply, %{state | read_state: :awaiting_payload, sock: sock}}
+    {:noreply, %{state | read_state: read_state, sock: sock}}
   end
 
   def handle_info({:read_data, data}, %{read_state: st, info_hash: hash, sock: sock, read_pid: pid} = state)
@@ -102,12 +108,16 @@ defmodule Peer.Connection do
       {:ok, msg} ->
         Peer.EventManager.received_message(hash, {self(), msg})
         handle_msg(msg, state)
-      {:error, _} ->
+      {:error, reason} ->
+        Logger.debug("Error parsing packet: #{reason}")
+        Logger.debug(byte_size data)
+        Logger.debug(inspect data)
         {:noreply, state}
     end
   end
 
-  def handle_info({:read_error, _reason}, state) do
+  def handle_info({:read_error, reason}, state) do
+    Logger.debug("Got a read error (reason: #{reason})")
     {:stop, :normal, state}
   end
 
@@ -131,6 +141,7 @@ defmodule Peer.Connection do
   end
 
   def terminate(_reason, %{sock: sock}) do
+    Logger.debug("In terminate")
     Peer.Socket.close(sock)
   end
 

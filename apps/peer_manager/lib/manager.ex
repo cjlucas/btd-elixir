@@ -1,7 +1,7 @@
 defmodule Peer.Manager do
   use GenServer
   require Logger
-  alias Bittorrent.Message.{Bitfield, Unchoke, Request, Interested, Piece}
+  alias Bittorrent.Message.{Bitfield, Unchoke, Request, Interested, Piece, Have}
 
   @name __MODULE__
 
@@ -15,7 +15,8 @@ defmodule Peer.Manager do
 
   def init(info_hash) do
     Registry.register(Peer.Manager.Registry, info_hash, [])
-    Peer.EventManager.register(info_hash)
+    {:ok, _} = Peer.EventManager.register(info_hash)
+    {:ok, _} = File.EventManager.register(info_hash)
 
     pieces =
       FileManager.pieces(info_hash)
@@ -49,6 +50,7 @@ defmodule Peer.Manager do
           Peer.Connection.send_msg(conn, %Request{index: index, begin: begin, length: length})
           rest
         [] ->
+          Logger.debug("Done sending pieces")
           []
       end
 
@@ -68,6 +70,7 @@ defmodule Peer.Manager do
   end
 
   def handle_info({:sent_message, _conn, msg}, state) do
+    #Logger.debug("Sent message #{inspect msg}")
     {:noreply, state}
   end
 
@@ -76,7 +79,16 @@ defmodule Peer.Manager do
     {:stop, :normal, state}
   end
 
+  def handle_info({:piece_completed, info_hash, piece_idx}, state) do
+    dispatch_msg(info_hash, %Have{index: piece_idx})
+    {:noreply, state}
+  end
+
   def terminate(_reason, %{info_hash: h}) do
     Peer.Stats.Store.remove(h)
+  end
+
+  defp dispatch_msg(info_hash, msg) do
+    Peer.Registry.lookup(info_hash) |> Enum.each(&Peer.Connection.send_msg(&1, msg))
   end
 end
