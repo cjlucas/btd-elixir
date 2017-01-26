@@ -30,7 +30,7 @@ defmodule Torrent.FileHandler.Manager do
 
     {:noreply, state}
   end
-  
+
   def handle_call({:read, fpath, loc, num_bytes}, from, state) do
     spawn_link(fn ->
       GenServer.reply(from, call_handler(fpath, :read, [loc, num_bytes]))

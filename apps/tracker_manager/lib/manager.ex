@@ -44,7 +44,7 @@ defmodule Tracker.Manager do
       %{entry | timer: nil}
     end
   end
-  
+
   defmodule State do
     defstruct entries: %{}
   end
@@ -126,7 +126,7 @@ defmodule Tracker.Manager do
     Logger.debug("Got response #{inspect resp}. Queuing request to fire after #{duration} seconds")
 
     if Map.has_key?(entries, info_hash) do
-      entries = Map.update!(entries, info_hash, fn entry -> 
+      entries = Map.update!(entries, info_hash, fn entry ->
         entry = entry
         |> Entry.cancel_timer
         |> Entry.reorder_trackers(url)
@@ -143,7 +143,7 @@ defmodule Tracker.Manager do
   end
 
   defp handle_request(info_hash, stats, %{entries: entries} = state) do
-    entries = Map.update!(entries, info_hash, fn entry -> 
+    entries = Map.update!(entries, info_hash, fn entry ->
       req = %Tracker.Dispatcher.Request{
         info_hash: info_hash,
         trackers: List.flatten(entry.trackers),

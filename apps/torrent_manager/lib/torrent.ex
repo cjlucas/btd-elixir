@@ -38,7 +38,7 @@ defmodule Torrent do
   defp build_file_list(%Bento.Metainfo.MultiFile{files: files}) do
     files |> Enum.map(fn f ->
       %Torrent.File{path: f["path"], size: f["length"]}
-    end) 
+    end)
   end
 
   defp tracker_list(announce, announce_list) when is_nil(announce_list) do

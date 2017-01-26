@@ -10,11 +10,11 @@ use Mix.Config
 
 # You can configure for your application as:
 #
-#     config :fs_manager, key: :value
+#     config :file_manager, key: :value
 #
 # And access this configuration in your application as:
 #
-#     Application.get_env(:fs_manager, :key)
+#     Application.get_env(:file_manager, :key)
 #
 # Or configure a 3rd-party app:
 #

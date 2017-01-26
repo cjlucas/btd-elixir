@@ -26,17 +26,21 @@ defmodule Torrent.Registry do
   end
 
   def lookup({:info_hash, hash}) do
-    GenServer.call(__MODULE__, {:lookup, :info_hash, hash}) 
+    GenServer.call(__MODULE__, {:lookup, :info_hash, hash})
   end
 
   def lookup({:skey_hash, hash}) do
-    GenServer.call(__MODULE__, {:lookup, :skey_hash, hash}) 
+    GenServer.call(__MODULE__, {:lookup, :skey_hash, hash})
+  end
+
+  def init(:ok) do
+    {:ok, %State{}}
   end
 
   def handle_call(:size, _from, %{info_hash_map: map} = state) do
     {:reply, Map.size(map), state}
   end
-  
+
   def handle_call(:reset, _from, _state) do
     [Torrent.Store.Supervisor, Torrent.Manager.Supervisor]
     |> Enum.each(fn sup ->
@@ -61,7 +65,7 @@ defmodule Torrent.Registry do
       {:reply, {:ok, {pid1, pid2}}, state}
     end
   end
-  
+
   def handle_call({:deregister, info_hash}, _from, state) do
     if Map.has_key?(state.info_hash_map, info_hash) do
       {pid1, pid2} = Map.get(state.info_hash_map, info_hash)
@@ -83,7 +87,7 @@ defmodule Torrent.Registry do
       {:reply, {:error, :not_found}, state}
     end
   end
-  
+
   def handle_call({:lookup, :skey_hash, hash}, _from, %{skey_hash_map: map} = state) do
     if Map.has_key?(map, hash) do
       {:reply, {:ok, map[hash]}, state}

@@ -6,7 +6,7 @@ defmodule Tracker do
   defmodule Response do
     defstruct failure_reason: nil, tracker_id: nil, interval: 0, num_seeders: 0, num_leechers: 0, peers: []
   end
-    
+
   @valid_events [:started, :stopped, :completed]
 
   def request(%Request{event: event} = req)
@@ -32,7 +32,7 @@ defmodule Tracker do
               params
           end
 
-        params = Map.merge(URI.decode_query(uri.query || ""), params) 
+        params = Map.merge(URI.decode_query(uri.query || ""), params)
         IO.puts URI.encode_query(params)
         with {:ok, resp} = HTTPoison.get(%{uri | query: URI.encode_query(params)}),
              {:ok, data} = Bento.decode(resp.body),

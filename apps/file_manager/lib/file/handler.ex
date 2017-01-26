@@ -7,7 +7,7 @@ defmodule Torrent.FileHandler do
   end
 
   def start_link(fpath, timeout \\ 5000) do
-    GenServer.start_link(__MODULE__, {fpath, timeout}) 
+    GenServer.start_link(__MODULE__, {fpath, timeout})
   end
 
   def init({fpath, timeout}) do
