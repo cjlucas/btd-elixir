@@ -16,4 +16,15 @@ defmodule PeerManager do
 
     Supervisor.start_link(children, [strategy: :one_for_one])
   end
+
+  def register(info_hash) do
+    {:ok, pid} = Peer.Manager.Supervisor.start_child(info_hash)
+    :ok = Peer.Manager.Store.add(info_hash)
+  end
+
+  def deregister(info_hash) do
+    :ok = Peer.Manager.Store.remove(info_hash)
+    :ok = Supervisor.terminate_child(Peer.Manager.Supervisor, info_hash)
+    :ok = Supervisor.delete_child(Peer.Manager.Supervisor, info_hash)
+  end
 end
