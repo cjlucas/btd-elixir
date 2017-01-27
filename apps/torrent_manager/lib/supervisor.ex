@@ -7,7 +7,7 @@ defmodule Torrent.Supervisor do
 
   def init(:ok) do
     children = [
-      worker(Torrent.Registry, []),
+      worker(Torrent.Store, []),
       supervisor(Torrent.Store.Supervisor, []),
       supervisor(Torrent.Manager.Supervisor, []),
     ]

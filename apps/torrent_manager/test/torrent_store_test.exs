@@ -6,15 +6,15 @@ defmodule Torrent.StoreTest do
 
   setup_all do
     {:ok, files} = File.ls(@fixtures_dir)
-    torrent = files
-               |> Enum.filter(&(String.ends_with?(&1, ".torrent")))
-               |> Enum.map(&(Path.join(@fixtures_dir, &1)))
-               |> Enum.map(&File.read!/1)
-               |> Enum.map(&Torrent.parse/1)
-               |> Enum.filter(&(elem(&1, 0) == :ok))
-               |> Enum.map(&elem(&1, 1))
-               |> List.first
-
+    torrent =
+      files
+      |> Enum.filter(&(String.ends_with?(&1, ".torrent")))
+      |> Enum.map(&(Path.join(@fixtures_dir, &1)))
+      |> Enum.map(&File.read!/1)
+      |> Enum.map(&Torrent.parse/1)
+      |> Enum.filter(&(elem(&1, 0) == :ok))
+      |> Enum.map(&elem(&1, 1))
+      |> List.first
 
     {:ok, %{torrent: torrent}}
   end
