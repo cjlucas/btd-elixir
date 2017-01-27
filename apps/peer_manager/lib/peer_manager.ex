@@ -23,6 +23,9 @@ defmodule PeerManager do
   end
 
   def deregister(info_hash) do
+    Peer.Registry.lookup(info_hash)
+    |> Enum.each(&GenServer.stop(&1))
+
     :ok = Peer.Manager.Store.remove(info_hash)
     :ok = Supervisor.terminate_child(Peer.Manager.Supervisor, info_hash)
     :ok = Supervisor.delete_child(Peer.Manager.Supervisor, info_hash)
