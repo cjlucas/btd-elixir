@@ -1,40 +1,22 @@
 defmodule Torrent.Store do
   use GenServer
 
-  defmodule State do
-    defstruct torrent: nil, peer_id: <<>>, uploaded: 0, downloaded: 0
+  def start_link do
+    Agent.start_link(fn -> %{} end, name: __MODULE__)
   end
 
-  def start_link(torrent) do
-    GenServer.start_link(__MODULE__, torrent)
+  @spec add(Torrent.t) :: :ok
+  def add(%{info_hash: info_hash} = torrent) do
+    Agent.update(__MODULE__, &Map.put(&1, info_hash, torrent))
   end
 
-  def incr_upload(pid, incr_amnt) when is_number(incr_amnt) do
-    GenServer.call(pid, {:incr_upload, incr_amnt})
+  @spec remove(binary) :: :ok
+  def remove(info_hash) do
+    Agent.update(__MODULE__, &Map.delete(&1, info_hash))
   end
 
-  def incr_download(pid, incr_amnt) when is_number(incr_amnt) do
-    GenServer.call(pid, {:incr_download, incr_amnt})
-  end
-
-  def state(pid) do
-    GenServer.call(pid, :state)
-  end
-
-  def init(torrent) do
-    peer_id = :crypto.strong_rand_bytes(20)
-    {:ok, %State{torrent: torrent, peer_id: peer_id}}
-  end
-
-  def handle_call({:incr_upload, amnt}, _from, %{uploaded: uploaded} = state) do
-    {:reply, :ok, %{state | uploaded: uploaded + amnt}}
-  end
-
-  def handle_call({:incr_download, amnt}, _from, %{downloaded: downloaded} = state) do
-    {:reply, :ok, %{state | downloaded: downloaded + amnt}}
-  end
-
-  def handle_call(:state, _from, state) do
-    {:reply, state, state}
+  @spec get(binary) :: Torrent.t | nil
+  def get(info_hash) do
+    Agent.get(__MODULE__, &Map.get(&1, info_hash))
   end
 end

@@ -11,13 +11,18 @@ defmodule Torrent.StoreTest do
                |> Enum.map(&(Path.join(@fixtures_dir, &1)))
                |> Enum.map(&File.read!/1)
                |> Enum.map(&Torrent.parse/1)
+               |> Enum.filter(&(elem(&1, 0) == :ok))
+               |> Enum.map(&elem(&1, 1))
                |> List.first
+
 
     {:ok, %{torrent: torrent}}
   end
 
-  test "start_link", %{torrent: torrent} do
-    assert {:ok, pid} = Torrent.Store.start_link(torrent)
-    assert is_pid(pid)
+  test "add/1, get/1 and remove/1", %{torrent: torrent} do
+    assert Torrent.Store.add(torrent) == :ok
+    assert Torrent.Store.get(torrent.info_hash) == torrent
+    assert Torrent.Store.remove(torrent.info_hash) == :ok
+    assert Torrent.Store.get(torrent.info_hash) == nil
   end
 end
