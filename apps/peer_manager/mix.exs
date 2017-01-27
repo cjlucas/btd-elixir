@@ -18,7 +18,7 @@ defmodule PeerManager.Mixfile do
   #
   # Type "mix help compile.app" for more information
   def application do
-    [applications: [:logger, :torrent_manager],
+    [applications: [:logger, :file_manager],
      mod: {PeerManager, []}]
   end
 
