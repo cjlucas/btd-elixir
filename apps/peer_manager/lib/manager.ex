@@ -64,6 +64,17 @@ defmodule Peer.Manager do
     {:noreply, %{state | pieces: pieces}}
   end
 
+  def handle_info({:received_message, conn, %Request{index: idx, begin: offset, length: len}}, %{info_hash: h} = state) do
+    case FileManager.read_block(h, idx, offset, len) do
+      {:ok, data} ->
+        Peer.Connection.send_msg(conn, %Piece{index: offset, begin: offset, block: data})
+      {:error, reason} ->
+        Logger.debug("Read of requested block returned an error: #{reason}")
+    end
+
+    {:noreply, state}
+  end
+
   def handle_info({:received_message, _conn, msg}, state) do
     {:noreply, state}
   end
