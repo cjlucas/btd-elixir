@@ -30,7 +30,6 @@ defmodule Peer.Manager do
   end
 
   def handle_info({:peer_connected, peer_id}, %{info_hash: info_hash} = state) do
-    IO.puts("in peer_connected")
     :ok = Peer.Manager.Store.add_peer(info_hash, peer_id)
     {:noreply, state}
   end
@@ -40,8 +39,6 @@ defmodule Peer.Manager do
   end
 
   def handle_info({:received_message, peer_id, %Bitfield{}}, %{info_hash: info_hash} = state) do
-    IO.puts("GOT BITFIELD")
-    IO.puts(inspect Peer.Registry.lookup(info_hash, peer_id))
     send_msg(info_hash, peer_id, %Interested{})
     {:noreply, state}
   end
@@ -63,7 +60,7 @@ defmodule Peer.Manager do
       end
 
     FileManager.write_block(h, index, begin, block)
-    Peer.Manager.Store.incr_downloaded(h, peer_id, byte_size(block))
+    :ok = Peer.Manager.Store.incr_downloaded(h, peer_id, byte_size(block))
 
     {:noreply, %{state | pieces: pieces}}
   end
