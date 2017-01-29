@@ -29,29 +29,30 @@ defmodule Peer.Manager do
     {:ok, %State{info_hash: info_hash, pieces: pieces}}
   end
 
-  def handle_info({:peer_connected, _conn}, state) do
+  def handle_info({:peer_connected, peer_id}, %{info_hash: info_hash} = state) do
+    :ok = Peer.Manager.Store.add_peer(info_hash, peer_id)
     {:noreply, state}
   end
 
-  def handle_info({:peer_disconnected, _conn}, state) do
+  def handle_info({:peer_disconnected, _peer_id}, state) do
     {:noreply, state}
   end
 
-  def handle_info({:received_message, conn, %Bitfield{}}, state) do
-    Peer.Connection.send_msg(conn, %Interested{})
+  def handle_info({:received_message, peer_id, %Bitfield{}}, %{info_hash: info_hash} = state) do
+    send_msg(info_hash, peer_id, %Interested{})
     {:noreply, state}
   end
 
-  def handle_info({:received_message, conn, %Unchoke{}}, %{pieces: [{index, begin, length} | rest]} = state) do
-    Peer.Connection.send_msg(conn, %Request{index: index, begin: begin, length: length})
+  def handle_info({:received_message, peer_id, %Unchoke{}}, %{info_hash: info_hash, pieces: [{index, begin, length} | rest]} = state) do
+    send_msg(info_hash, peer_id, %Request{index: index, begin: begin, length: length})
     {:noreply, %{state | pieces: rest}}
   end
 
-  def handle_info({:received_message, conn, %Piece{index: index, begin: begin, block: block}}, %{info_hash: h, pieces: pieces} = state) do
+  def handle_info({:received_message, peer_id, %Piece{index: index, begin: begin, block: block}}, %{info_hash: h, pieces: pieces} = state) do
     pieces =
       case pieces do
         [{index, begin, length} | rest] ->
-          Peer.Connection.send_msg(conn, %Request{index: index, begin: begin, length: length})
+          send_msg(h, peer_id, %Request{index: index, begin: begin, length: length})
           rest
         [] ->
           Logger.debug("Done sending pieces")
@@ -59,15 +60,15 @@ defmodule Peer.Manager do
       end
 
     FileManager.write_block(h, index, begin, block)
-    Peer.Manager.Store.incr_downloaded(h, byte_size(block))
+    :ok = Peer.Manager.Store.incr_downloaded(h, peer_id, byte_size(block))
 
     {:noreply, %{state | pieces: pieces}}
   end
 
-  def handle_info({:received_message, conn, %Request{index: idx, begin: offset, length: len}}, %{info_hash: h} = state) do
+  def handle_info({:received_message, peer_id, %Request{index: idx, begin: offset, length: len}}, %{info_hash: h} = state) do
     case FileManager.read_block(h, idx, offset, len) do
       {:ok, data} ->
-        Peer.Connection.send_msg(conn, %Piece{index: offset, begin: offset, block: data})
+        send_msg(h, peer_id, %Piece{index: offset, begin: offset, block: data})
       {:error, reason} ->
         Logger.debug("Read of requested block returned an error: #{reason}")
     end
@@ -75,16 +76,16 @@ defmodule Peer.Manager do
     {:noreply, state}
   end
 
-  def handle_info({:received_message, _conn, msg}, state) do
+  def handle_info({:received_message, _peer_id, _msg}, state) do
     {:noreply, state}
   end
 
-  def handle_info({:sent_message, _conn, %Piece{block: block}}, %{info_hash: h} = state) do
-    Peer.Manager.Store.incr_uploaded(h, byte_size(block))
+  def handle_info({:sent_message, peer_id, %Piece{block: block}}, %{info_hash: h} = state) do
+    Peer.Manager.Store.incr_uploaded(h, peer_id, byte_size(block))
     {:noreply, state}
   end
 
-  def handle_info({:sent_message, _conn, msg}, state) do
+  def handle_info({:sent_message, _peer_id, _msg}, state) do
     #Logger.debug("Sent message #{inspect msg}")
     {:noreply, state}
   end
@@ -99,11 +100,11 @@ defmodule Peer.Manager do
     {:noreply, state}
   end
 
-  def terminate(_reason, %{info_hash: h}) do
-    Peer.Manager.Store.remove(h)
-  end
-
   defp dispatch_msg(info_hash, msg) do
     Peer.Registry.lookup(info_hash) |> Enum.each(&Peer.Connection.send_msg(&1, msg))
+  end
+
+  defp send_msg(info_hash, peer_id, msg) do
+    Peer.Registry.lookup(info_hash, peer_id) |> Peer.Connection.send_msg(msg)
   end
 end

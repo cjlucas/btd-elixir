@@ -5,12 +5,13 @@ defmodule PeerManager do
     import Supervisor.Spec, warn: false
 
     children = [
-      worker(Peer.Manager.Store, []),
       worker(Peer.Registry, []),
       worker(Peer.EventManager, []),
       supervisor(Peer.Handshake.Supervisor, []),
       supervisor(Peer.Connection.Supervisor, []),
+      supervisor(Peer.Manager.Store.Registry, []),
       worker(Registry, [:unique, Peer.Manager.Registry]),
+      supervisor(Peer.Manager.Store.Supervisor, []),
       supervisor(Peer.Manager.Supervisor, []),
     ]
 
@@ -18,15 +19,17 @@ defmodule PeerManager do
   end
 
   def register(info_hash) do
-    {:ok, pid} = Peer.Manager.Supervisor.start_child(info_hash)
-    :ok = Peer.Manager.Store.add(info_hash)
+    {:ok, _} = Peer.Manager.Supervisor.start_child(info_hash)
+    {:ok, _} = Peer.Manager.Store.Supervisor.start_child(info_hash)
+    :ok
   end
 
   def deregister(info_hash) do
     Peer.Registry.lookup(info_hash)
     |> Enum.each(&GenServer.stop(&1))
 
-    :ok = Peer.Manager.Store.remove(info_hash)
+    :ok = Supervisor.terminate_child(Peer.Manager.Store.Supervisor, info_hash)
+    :ok = Supervisor.delete_child(Peer.Manager.Store.Supervisor, info_hash)
     :ok = Supervisor.terminate_child(Peer.Manager.Supervisor, info_hash)
     :ok = Supervisor.delete_child(Peer.Manager.Supervisor, info_hash)
   end

@@ -44,6 +44,7 @@ defmodule Peer.Connection do
     @type read_state :: :awaiting_length | :awaiting_payload
 
     defstruct info_hash: <<>>,
+      peer_id: <<>>,
       sock: nil,
       bitfield: nil,
       choked: true,
@@ -54,8 +55,8 @@ defmodule Peer.Connection do
       read_state: :awaiting_length
   end
 
-  def start_link(info_hash, sock, initial_data) do
-    GenServer.start_link(__MODULE__, {info_hash, sock, initial_data})
+  def start_link(info_hash, peer_id, sock, initial_data) do
+    GenServer.start_link(__MODULE__, {info_hash, peer_id, sock, initial_data})
   end
 
   def send_msg(pid, msg) do
@@ -66,11 +67,11 @@ defmodule Peer.Connection do
     GenServer.call(pid, {:has_piece?, idx})
   end
 
-  def init({info_hash, %{sock: s} = sock, initial_data}) do
-    {:ok, {host, port}} = :inet.peername(sock.sock)
-    host = host |> Tuple.to_list |> Enum.join(".")
-    Peer.Registry.register(info_hash, {host, port})
-    Peer.EventManager.peer_connected(info_hash, self())
+  def init({info_hash, peer_id, %{sock: s} = sock, initial_data}) do
+    #{:ok, {host, port}} = :inet.peername(sock.sock)
+    #host = host |> Tuple.to_list |> Enum.join(".")
+    Peer.Registry.register(info_hash, peer_id)
+    Peer.EventManager.peer_connected(info_hash, peer_id)
 
     pid = self()
     read_pid = spawn_link(fn ->
@@ -79,7 +80,7 @@ defmodule Peer.Connection do
 
     send(read_pid, 4)
 
-    {:ok, %State{info_hash: info_hash, sock: sock, read_pid: read_pid}}
+    {:ok, %State{info_hash: info_hash, peer_id: peer_id, sock: sock, read_pid: read_pid}}
   end
 
   def handle_info({:read_data, data}, %{read_state: st, sock: sock, read_pid: pid} = state)
@@ -96,7 +97,7 @@ defmodule Peer.Connection do
     {:noreply, %{state | read_state: read_state, sock: sock}}
   end
 
-  def handle_info({:read_data, data}, %{read_state: st, info_hash: hash, sock: sock, read_pid: pid} = state)
+  def handle_info({:read_data, data}, %{read_state: st, info_hash: hash, peer_id: id, sock: sock, read_pid: pid} = state)
       when st == :awaiting_payload do
     {sock, data} = Peer.Socket.decrypt(sock, data)
 
@@ -106,7 +107,7 @@ defmodule Peer.Connection do
 
     case Bittorrent.Message.parse(data) do
       {:ok, msg} ->
-        Peer.EventManager.received_message(hash, {self(), msg})
+        Peer.EventManager.received_message(hash, {id, msg})
         handle_msg(msg, state)
       {:error, reason} ->
         Logger.debug("Error parsing packet: #{reason}")
@@ -128,11 +129,11 @@ defmodule Peer.Connection do
     {:reply, BitSet.get(bits, idx) == 1, state}
   end
 
-  def handle_cast({:send_msg, msg}, %{info_hash: hash, sock: sock} = state) do
+  def handle_cast({:send_msg, msg}, %{info_hash: hash, peer_id: id, sock: sock} = state) do
     data = Bittorrent.Message.encode(msg)
     case Peer.Socket.send(sock, [<<byte_size(data)::32>>, data]) do
       {:ok, sock} ->
-        Peer.EventManager.sent_message(hash, {self(), msg})
+        Peer.EventManager.sent_message(hash, {id, msg})
         {:noreply, %{state | sock: sock}}
       {:error, reason} ->
         Logger.debug("Send failed with reason: #{reason}")
@@ -140,9 +141,9 @@ defmodule Peer.Connection do
     end
   end
 
-  def terminate(_reason, %{info_hash: info_hash, sock: sock}) do
+  def terminate(_reason, %{info_hash: info_hash, peer_id: id, sock: sock}) do
     Logger.debug("In terminate")
-    Peer.EventManager.peer_disconnected(info_hash, self())
+    Peer.EventManager.peer_disconnected(info_hash, id)
     Peer.Socket.close(sock)
   end
 
