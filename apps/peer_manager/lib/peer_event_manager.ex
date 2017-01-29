@@ -14,20 +14,20 @@ defmodule Peer.EventManager do
     Registry.unregister(@name, info_hash)
   end
 
-  def peer_connected(info_hash, conn) do
-    notify(info_hash, {:peer_connected, conn})
+  def peer_connected(info_hash, peer_id) do
+    notify(info_hash, {:peer_connected, peer_id})
   end
 
-  def peer_disconnected(info_hash, conn) do
-    notify(info_hash, {:peer_disconnected, conn})
+  def peer_disconnected(info_hash, peer_id) do
+    notify(info_hash, {:peer_disconnected, peer_id})
   end
 
-  def received_message(info_hash, {conn, msg}) do
-    notify(info_hash, {:received_message, conn, msg})
+  def received_message(info_hash, {peer_id, msg}) do
+    notify(info_hash, {:received_message, peer_id, msg})
   end
 
-  def sent_message(info_hash, {conn, msg}) do
-    notify(info_hash, {:sent_message, conn, msg})
+  def sent_message(info_hash, {peer_id, msg}) do
+    notify(info_hash, {:sent_message, peer_id, msg})
   end
 
   defp notify(info_hash, msg) do
