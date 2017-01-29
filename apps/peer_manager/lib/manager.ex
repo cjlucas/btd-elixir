@@ -59,7 +59,7 @@ defmodule Peer.Manager do
       end
 
     FileManager.write_block(h, index, begin, block)
-    Peer.Manager.Store.incr_downloaded(h, byte_size(block))
+    Peer.Manager.Store.incr_downloaded(h, <<>>, byte_size(block))
 
     {:noreply, %{state | pieces: pieces}}
   end
@@ -97,10 +97,6 @@ defmodule Peer.Manager do
   def handle_info({:piece_completed, info_hash, piece_idx}, state) do
     dispatch_msg(info_hash, %Have{index: piece_idx})
     {:noreply, state}
-  end
-
-  def terminate(_reason, %{info_hash: h}) do
-    Peer.Manager.Store.remove(h)
   end
 
   defp dispatch_msg(info_hash, msg) do

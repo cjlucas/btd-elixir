@@ -11,7 +11,7 @@ defmodule Peer.HandshakeTest do
   setup do
     {:ok, listen} = :gen_tcp.listen(0, [:binary, active: false])
 
-    :ok = Peer.Manager.Store.add(@info_hash)
+    {:ok, _} = Peer.Manager.Store.start_link(@info_hash)
 
     on_exit fn ->
       :gen_tcp.close(listen)

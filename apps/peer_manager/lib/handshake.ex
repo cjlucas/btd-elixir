@@ -214,7 +214,7 @@ defmodule Peer.Handshake do
         >> = synced_buf
 
         skey_hash = bin_xor(req23buf, req3(s))
-        case Peer.Manager.Store.resolve_info_hash(skey_hash) do
+        case Peer.Manager.Store.Registry.resolve_info_hash(skey_hash) do
           info_hash when is_binary(info_hash) ->
             Logger.debug("GOT TORRENT! #{inspect info_hash}")
             {:next_state, %{info | info_hash: info_hash, buffer: [rest]}}
@@ -350,7 +350,7 @@ defmodule Peer.Handshake do
   end
 
   defp handle_state(:send_handshake, %{conn: conn, info_hash: info_hash} = info) do
-    case Peer.Manager.Store.lookup_peer_id(info_hash) do
+    case Peer.Manager.Store.peer_id(info_hash) do
       peer_id when is_binary(peer_id) ->
         payload = [
           <<@pstrlen::8>>,
