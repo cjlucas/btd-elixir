@@ -9,7 +9,7 @@ defmodule Peer.Manager.Store.Registry do
 
   def resolve_info_hash(skey_hash) do
     case Registry.lookup(__MODULE__, {:skey_hash, skey_hash}) do
-      [{_, info_hash} | rest] ->
+      [{_, info_hash} | _] ->
         info_hash
       [] ->
         nil
