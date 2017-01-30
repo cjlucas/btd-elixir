@@ -7,29 +7,42 @@ defmodule Peer.Manager.NewStoreTest do
     :ok
   end
 
-  test "add_peer/2 and has_peer?/2" do
-    refute Store.has_peer?(<<>>, <<1>>)
-    assert Store.add_peer(<<>>, <<1>>) == :ok
-    assert Store.has_peer?(<<>>, <<1>>)
+  test "add_peers/2 and pop_peer/1 with single peer" do
+    # test single peer
+    assert Store.pop_peer(<<>>) |> is_nil
+    assert Store.add_peers(<<>>, [{"127.0.0.1", 50000}]) == :ok
+    assert Store.pop_peer(<<>>) == {"127.0.0.1", 50000}
+    assert Store.pop_peer(<<>>) |> is_nil
+  end
+
+  test "add_peers/2 and pop_peer/1 with multiple peers" do
+    assert Store.add_peers(<<>>, [{"127.0.0.1", 50000}, {"8.8.8.8", 50000}]) == :ok
+    refute Store.pop_peer(<<>>) |> is_nil
+    refute Store.pop_peer(<<>>) |> is_nil
+    assert Store.pop_peer(<<>>) |> is_nil
+  end
+
+  test "add_peers/2 and pop_peer/1 with duplicate peers" do
+    assert Store.add_peers(<<>>, [{"127.0.0.1", 50000}, {"127.0.0.1", 50000}]) == :ok
+    refute Store.pop_peer(<<>>) |> is_nil
+    assert Store.pop_peer(<<>>) |> is_nil
   end
 
   test "peer_id/1" do
-    assert is_binary(Store.peer_id(<<>>))
+    assert Store.peer_id(<<>>) |> is_binary
   end
 
   test "incr_uploaded/3 and incr_downloaded/3 and stats/1" do
-    :ok = Store.add_peer(<<>>, <<1>>)
-
-    assert Store.incr_uploaded(<<>>, <<1>>, 5) == :ok
+    assert Store.incr_uploaded(<<>>, 5) == :ok
     assert Store.stats(<<>>) == [uploaded: 5, downloaded: 0]
 
-    assert Store.incr_uploaded(<<>>, <<1>>, 10) == :ok
+    assert Store.incr_uploaded(<<>>, 10) == :ok
     assert Store.stats(<<>>) == [uploaded: 15, downloaded: 0]
 
-    assert Store.incr_downloaded(<<>>, <<1>>, 5) == :ok
+    assert Store.incr_downloaded(<<>>, 5) == :ok
     assert Store.stats(<<>>) == [uploaded: 15, downloaded: 5]
 
-    assert Store.incr_downloaded(<<>>, <<1>>, 10) == :ok
+    assert Store.incr_downloaded(<<>>, 10) == :ok
     assert Store.stats(<<>>) == [uploaded: 15, downloaded: 15]
   end
 end

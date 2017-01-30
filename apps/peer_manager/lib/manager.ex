@@ -29,8 +29,7 @@ defmodule Peer.Manager do
     {:ok, %State{info_hash: info_hash, pieces: pieces}}
   end
 
-  def handle_info({:peer_connected, peer_id}, %{info_hash: info_hash} = state) do
-    :ok = Peer.Manager.Store.add_peer(info_hash, peer_id)
+  def handle_info({:peer_connected, _peer_id}, state) do
     {:noreply, state}
   end
 
@@ -60,7 +59,7 @@ defmodule Peer.Manager do
       end
 
     FileManager.write_block(h, index, begin, block)
-    :ok = Peer.Manager.Store.incr_downloaded(h, peer_id, byte_size(block))
+    :ok = Peer.Manager.Store.incr_downloaded(h, byte_size(block))
 
     {:noreply, %{state | pieces: pieces}}
   end
@@ -80,8 +79,8 @@ defmodule Peer.Manager do
     {:noreply, state}
   end
 
-  def handle_info({:sent_message, peer_id, %Piece{block: block}}, %{info_hash: h} = state) do
-    Peer.Manager.Store.incr_uploaded(h, peer_id, byte_size(block))
+  def handle_info({:sent_message, _peer_id, %Piece{block: block}}, %{info_hash: h} = state) do
+    Peer.Manager.Store.incr_uploaded(h, byte_size(block))
     {:noreply, state}
   end
 

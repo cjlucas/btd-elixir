@@ -1,13 +1,10 @@
 defmodule Peer.Manager.Store do
-  defmodule PeerInfo do
-    defstruct uploaded: 0, downloaded: 0
-  end
-
   defmodule State do
     defstruct skey_hash: <<>>,
     peer_id: <<>>,
     peers: MapSet.new,
-    known_peers: %{}
+    downloaded: 0,
+    uploaded: 0
   end
 
   def start_link(info_hash) do
@@ -27,51 +24,44 @@ defmodule Peer.Manager.Store do
     via(info_hash) |> Agent.get(fn %{peer_id: peer_id} -> peer_id end)
   end
 
-  @spec add_peer(binary, binary) :: :ok
-  def add_peer(info_hash, peer_id) do
-    via(info_hash) |> Agent.update(fn %{known_peers: peers} = state ->
-      %{state | known_peers: Map.put_new(peers, peer_id, %PeerInfo{})}
+  @spec add_peers(binary, [{String.t, integer}]) :: :ok
+  def add_peers(info_hash, new_peers) do
+    via(info_hash) |> Agent.update(fn %{peers: peers} = state ->
+      peers = new_peers |> Enum.reduce(peers, &MapSet.put(&2, &1))
+      %{state | peers: peers}
     end)
   end
 
-  @spec has_peer?(binary, binary) :: boolean
-  def has_peer?(info_hash, peer_id) do
-    via(info_hash) |> Agent.get(fn %{known_peers: peers} ->
-      Map.has_key?(peers, peer_id)
+  @spec pop_peer(binary) :: {String.t, integer} | nil
+  def pop_peer(info_hash) do
+    via(info_hash) |> Agent.get_and_update(fn %{peers: peers} = state ->
+      if MapSet.size(peers) > 0 do
+        peer = Enum.random(peers)
+        {peer, %{state | peers: MapSet.delete(peers, peer)}}
+      else
+        {nil, state}
+      end
     end)
   end
 
-  @spec incr_uploaded(binary, binary, integer) :: :ok
-  def incr_uploaded(info_hash, peer_id, amnt) do
-    update_peer(info_hash, peer_id, fn peer ->
-      Map.update!(peer, :uploaded, &(&1 + amnt))
+  @spec incr_uploaded(binary, integer) :: :ok
+  def incr_uploaded(info_hash, amnt) do
+    via(info_hash) |> Agent.update(fn %{uploaded: up} = state ->
+      %{state | uploaded: up + amnt}
     end)
   end
 
-  @spec incr_downloaded(binary, binary, integer) :: :ok
-  def incr_downloaded(info_hash, peer_id, amnt) do
-    update_peer(info_hash, peer_id, fn peer ->
-      Map.update!(peer, :downloaded, &(&1 + amnt))
+  @spec incr_downloaded(binary, integer) :: :ok
+  def incr_downloaded(info_hash, amnt) do
+    via(info_hash) |> Agent.update(fn %{downloaded: down} = state ->
+      %{state | downloaded: down + amnt}
     end)
   end
 
   @spec stats(binary) :: [uploaded: integer, downloaded: integer]
   def stats(info_hash) do
-    via(info_hash) |> Agent.get(fn %{known_peers: peers} ->
-      peers
-      |> Map.values
-      |> Enum.map(fn %{uploaded: up, downloaded: dn} -> {up, dn} end)
-      |> Enum.unzip
-      |> Tuple.to_list
-      |> Enum.map(&Enum.sum/1)
-      |> Enum.zip([:uploaded, :downloaded])
-      |> Enum.map(fn {sum, key} -> {key, sum} end)
-    end)
-  end
-
-  defp update_peer(info_hash, peer_id, fun) do
-    via(info_hash) |> Agent.update(fn %{known_peers: peers} = state ->
-      %{state | known_peers: Map.update!(peers, peer_id, fun)}
+    via(info_hash) |> Agent.get(fn %{uploaded: up, downloaded: down} ->
+      [uploaded: up, downloaded: down]
     end)
   end
 

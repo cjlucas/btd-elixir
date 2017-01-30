@@ -33,4 +33,9 @@ defmodule PeerManager do
     :ok = Supervisor.terminate_child(Peer.Manager.Supervisor, info_hash)
     :ok = Supervisor.delete_child(Peer.Manager.Supervisor, info_hash)
   end
+
+  @spec add_peers(binary, [{String.t, integer}]) :: :ok
+  def add_peers(info_hash, peers) do
+    Peer.Manager.Store.add_peers(info_hash, peers)
+  end
 end
