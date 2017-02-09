@@ -6,7 +6,7 @@ defmodule Peer.Manager do
   @name __MODULE__
 
   defmodule State do
-    defstruct info_hash: <<>>, pieces: []
+    defstruct info_hash: <<>>, pieces: [], num_pieces: 0
   end
 
   def start_link(info_hash) do
@@ -26,7 +26,7 @@ defmodule Peer.Manager do
       end)
       |> elem(0)
 
-    {:ok, %State{info_hash: info_hash, pieces: pieces}}
+    {:ok, %State{info_hash: info_hash, pieces: pieces, num_pieces: length(FileManager.pieces(info_hash))}}
   end
 
   def handle_info({:peer_connected, _peer_id}, state) do
@@ -37,8 +37,21 @@ defmodule Peer.Manager do
     {:noreply, state}
   end
 
-  def handle_info({:received_message, peer_id, %Bitfield{}}, %{info_hash: info_hash} = state) do
+  def handle_info({:received_message, peer_id, %Bitfield{bitfield: bits}}, %{info_hash: info_hash, num_pieces: n} = state) do
+    bs = BitSet.from_binary(bits)
+
+    0..n-1
+    |> Enum.map(&{&1, BitSet.get(bs, &1)})
+    |> Enum.filter(&elem(&1, 1))
+    |> Enum.map(&elem(&1, 0))
+    |> Enum.each(&Peer.Manager.Store.seen_piece(info_hash, &1))
+
     send_msg(info_hash, peer_id, %Interested{})
+    {:noreply, state}
+  end
+
+  def handle_info({:received_message, _peer_id, %Have{index: idx}}, %{info_hash: info_hash} = state) do
+    :ok = Peer.Manager.Store.seen_piece(info_hash, idx)
     {:noreply, state}
   end
 
