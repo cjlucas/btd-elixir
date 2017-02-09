@@ -73,6 +73,7 @@ defmodule Peer.Manager do
 
     FileManager.write_block(h, index, begin, block)
     :ok = Peer.Manager.Store.incr_downloaded(h, byte_size(block))
+    :ok = Peer.Manager.Store.received_block(h, peer_id, {index, begin, block})
 
     {:noreply, %{state | pieces: pieces}}
   end
@@ -94,6 +95,11 @@ defmodule Peer.Manager do
 
   def handle_info({:sent_message, _peer_id, %Piece{block: block}}, %{info_hash: h} = state) do
     Peer.Manager.Store.incr_uploaded(h, byte_size(block))
+    {:noreply, state}
+  end
+
+  def handle_info({:sent_message, peer_id, %Request{index: idx, begin: offset, length: len}}, %{info_hash: h} = state) do
+    :ok = Peer.Manager.Store.requested_block(h, peer_id, {idx, offset, len})
     {:noreply, state}
   end
 
