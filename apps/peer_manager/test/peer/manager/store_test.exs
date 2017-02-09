@@ -55,4 +55,30 @@ defmodule Peer.Manager.NewStoreTest do
     assert Store.seen_piece(<<>>, 1) == :ok
     assert Store.pieces_by_rarity(<<>>) == [[1], [2]]
   end
+
+  test "requested_block/3, received_block/3, outstanding_requests/1 and outstanding_requests/2" do
+    assert Store.outstanding_requests(<<>>) |> MapSet.size == 0
+    assert Store.outstanding_requests(<<>>, <<1>>) |> MapSet.size == 0
+
+    assert Store.requested_block(<<>>, <<1>>, {0, 0, 3}) == :ok
+    assert Store.outstanding_requests(<<>>) == MapSet.new([{0, 0, 3}])
+    assert Store.outstanding_requests(<<>>, <<1>>) == MapSet.new([{0, 0, 3}])
+
+    assert Store.requested_block(<<>>, <<1>>, {1, 0, 3}) == :ok
+    assert Store.outstanding_requests(<<>>) == MapSet.new([{0, 0, 3}, {1, 0, 3}])
+    assert Store.outstanding_requests(<<>>, <<1>>) == MapSet.new([{0, 0, 3}, {1, 0, 3}])
+
+    assert Store.requested_block(<<>>, <<2>>, {0, 0, 3}) == :ok
+    assert Store.outstanding_requests(<<>>) == MapSet.new([{0, 0, 3}, {1, 0, 3}])
+    assert Store.outstanding_requests(<<>>, <<2>>) == MapSet.new([{0, 0, 3}])
+
+    assert Store.received_block(<<>>, <<1>>, {0, 0, 3}) == :ok
+    assert Store.outstanding_requests(<<>>) == MapSet.new([{0, 0, 3}, {1, 0, 3}])
+    assert Store.outstanding_requests(<<>>, <<1>>) == MapSet.new([{1, 0, 3}])
+
+    assert Store.received_block(<<>>, <<1>>, {1, 0, 3}) == :ok
+    assert Store.received_block(<<>>, <<2>>, {0, 0, 3}) == :ok
+    assert Store.outstanding_requests(<<>>) |> MapSet.size == 0
+    assert Store.outstanding_requests(<<>>, <<1>>) |> MapSet.size == 0
+  end
 end

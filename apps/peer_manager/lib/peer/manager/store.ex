@@ -6,7 +6,8 @@ defmodule Peer.Manager.Store do
     piece_rarity_tiers: [], # list of list of piece #s
     peers: MapSet.new,
     downloaded: 0,
-    uploaded: 0
+    uploaded: 0,
+    outstanding_reqs: %{} # peer id => MapSet of {idx, offset, size}
   end
 
   def start_link(info_hash) do
@@ -91,6 +92,38 @@ defmodule Peer.Manager.Store do
   def stats(info_hash) do
     via(info_hash) |> Agent.get(fn %{uploaded: up, downloaded: down} ->
       [uploaded: up, downloaded: down]
+    end)
+  end
+
+  @spec requested_block(binary, binary, {number, number, number}) :: :ok
+  def requested_block(info_hash, peer_id, block) do
+    via(info_hash) |> Agent.update(fn %{outstanding_reqs: reqs} = state ->
+      reqs = Map.update(reqs, peer_id, MapSet.new([block]), &MapSet.put(&1, block))
+      %{state | outstanding_reqs: reqs}
+    end)
+  end
+
+  @spec received_block(binary, binary, {number, number, number}) :: :ok
+  def received_block(info_hash, peer_id, block) do
+    via(info_hash) |> Agent.update(fn %{outstanding_reqs: reqs} = state ->
+      reqs = Map.update(reqs, peer_id, MapSet.new, &MapSet.delete(&1, block))
+      %{state | outstanding_reqs: reqs}
+    end)
+  end
+
+  @spec outstanding_requests(binary) :: [{number, number, number}]
+  def outstanding_requests(info_hash) do
+    via(info_hash) |> Agent.get(fn %{outstanding_reqs: reqs} ->
+      Enum.reduce(reqs, MapSet.new, fn {_peer_id, reqs}, agg ->
+        MapSet.union(agg, reqs)
+      end)
+    end)
+  end
+
+  @spec outstanding_requests(binary, binary) :: [{number, number, number}]
+  def outstanding_requests(info_hash, peer_id) do
+    via(info_hash) |> Agent.get(fn %{outstanding_reqs: reqs} ->
+      Map.get(reqs, peer_id, MapSet.new)
     end)
   end
 
