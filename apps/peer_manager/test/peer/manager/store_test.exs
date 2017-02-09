@@ -45,4 +45,14 @@ defmodule Peer.Manager.NewStoreTest do
     assert Store.incr_downloaded(<<>>, 10) == :ok
     assert Store.stats(<<>>) == [uploaded: 15, downloaded: 15]
   end
+
+  test "seen_piece/2 and pieces_by_rarity/1" do
+    assert Store.pieces_by_rarity(<<>>) == []
+    assert Store.seen_piece(<<>>, 1) == :ok
+    assert Store.pieces_by_rarity(<<>>) == [[1]]
+    assert Store.seen_piece(<<>>, 2) == :ok
+    assert Store.pieces_by_rarity(<<>>) == [[1, 2]]
+    assert Store.seen_piece(<<>>, 1) == :ok
+    assert Store.pieces_by_rarity(<<>>) == [[1], [2]]
+  end
 end

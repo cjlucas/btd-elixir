@@ -2,6 +2,8 @@ defmodule Peer.Manager.Store do
   defmodule State do
     defstruct skey_hash: <<>>,
     peer_id: <<>>,
+    piece_rarity_map: %{}, # piece # => instances seen
+    piece_rarity_tiers: [], # list of list of piece #s
     peers: MapSet.new,
     downloaded: 0,
     uploaded: 0
@@ -55,6 +57,33 @@ defmodule Peer.Manager.Store do
   def incr_downloaded(info_hash, amnt) do
     via(info_hash) |> Agent.update(fn %{downloaded: down} = state ->
       %{state | downloaded: down + amnt}
+    end)
+  end
+
+  @spec seen_piece(binary, number) :: :ok
+  def seen_piece(info_hash, piece_idx) do
+    via(info_hash) |> Agent.update(fn %{piece_rarity_map: m} = state ->
+      %{state | piece_rarity_map: Map.update(m, piece_idx, 1, &(&1 + 1)), piece_rarity_tiers: []}
+    end)
+  end
+
+  @spec pieces_by_rarity(binary) :: [[number]]
+  def pieces_by_rarity(info_hash) do
+    via(info_hash) |> Agent.get_and_update(fn %{piece_rarity_map: m, piece_rarity_tiers: t} = state ->
+      case t do
+        [] ->
+          tiers =
+            m
+            |> Enum.group_by(&elem(&1, 1))
+            |> Enum.sort_by(&elem(&1, 0))
+            |> Enum.map(&elem(&1, 1))
+            |> Enum.map(fn x -> Enum.map(x, &elem(&1, 0)) end)
+            |> Enum.reverse
+
+          {tiers, %{state | piece_rarity_tiers: tiers}}
+        _ ->
+          {t, state}
+      end
     end)
   end
 
