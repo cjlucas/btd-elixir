@@ -15,6 +15,8 @@ receive do
     port = System.argv |> Enum.at(1) |> String.to_integer
     IO.puts("host: #{host} port: #{port}")
     Peer.Handshake.Supervisor.connect(host, port, info_hash)
+
+    #:ok = PeerManager.add_peers(torrent.info_hash, resp.peers)
     Process.sleep(:infinity)
 after
   5000 -> IO.puts("timed out")

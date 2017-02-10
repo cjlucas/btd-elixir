@@ -65,11 +65,19 @@ defmodule Peer.Manager.Store do
     end)
   end
 
-  @spec seen_piece(binary, number) :: :ok
-  def seen_piece(info_hash, piece_idx) do
+  def peer_bitfield(info_hash, peer_id) do
+    get_connected_peer(info_hash, peer_id, fn %{bitfield: bf} -> bf end)
+  end
+
+  @spec seen_piece(binary, binary, number) :: :ok
+  def seen_piece(info_hash, peer_id, piece_idx) do
     via(info_hash) |> Agent.update(fn %{piece_rarity_map: m} = state ->
       %{state | piece_rarity_map: Map.update(m, piece_idx, 1, &(&1 + 1)), piece_rarity_tiers: []}
     end)
+
+    #update_connected_peer(info_hash, peer_id, fn %{bitfield: bf} = peer ->
+      #%{peer | bitfield: BitSet.set(bf, piece_idx, 1)}
+    #end)
   end
 
   @spec pieces_by_rarity(binary) :: [[number]]

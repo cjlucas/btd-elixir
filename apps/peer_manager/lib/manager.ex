@@ -3,6 +3,8 @@ defmodule Peer.Manager do
   require Logger
   alias Bittorrent.Message.{Bitfield, Unchoke, Request, Interested, Piece, Have}
 
+  @max_peers 50
+
   defmodule State do
     defstruct info_hash: <<>>
   end
@@ -23,10 +25,14 @@ defmodule Peer.Manager do
   end
 
   def handle_call({:add_peers, peers}, _from, %{info_hash: h} = state) do
-    {:reply, Peer.Manager.Store.add_peers(h, peers), state}
+    :ok = Peer.Manager.Store.add_peers(h, peers)
+    connect_to_peers(h)
+
+    {:reply, :ok, state}
   end
 
-  def handle_info({:peer_connected, _peer_id}, state) do
+  def handle_info({:peer_connected, peer_id}, state) do
+    IO.puts("GOT PEER #{inspect peer_id}")
     {:noreply, state}
   end
 
@@ -42,25 +48,33 @@ defmodule Peer.Manager do
     |> Enum.map(&{&1, BitSet.get(bs, &1)})
     |> Enum.filter(&elem(&1, 1))
     |> Enum.map(&elem(&1, 0))
-    |> Enum.each(&Peer.Manager.Store.seen_piece(info_hash, &1))
+    |> Enum.each(&Peer.Manager.Store.seen_piece(info_hash, peer_id, &1))
 
     send_msg(info_hash, peer_id, %Interested{})
     {:noreply, state}
   end
 
-  def handle_info({:received_message, _peer_id, %Have{index: idx}}, %{info_hash: info_hash} = state) do
-    :ok = Peer.Manager.Store.seen_piece(info_hash, idx)
+  def handle_info({:received_message, peer_id, %Have{index: idx}}, %{info_hash: info_hash} = state) do
+    :ok = Peer.Manager.Store.seen_piece(info_hash, peer_id, idx)
     {:noreply, state}
   end
 
-  def handle_info({:received_message, _peer_id, %Unchoke{}}, state) do
+  def handle_info({:received_message, peer_id, %Unchoke{}}, %{info_hash: info_hash} = state) do
+    Logger.debug("GOT UNCHOKE #{inspect peer_id}")
+    {idx, offset, size} = block = find_priority_block(info_hash, peer_id)
+    Logger.debug("GOT A PRIORITY BLOCK #{inspect block}")
+    send_msg(info_hash, peer_id, %Request{index: idx, begin: offset, length: size})
     {:noreply, state}
   end
 
   def handle_info({:received_message, peer_id, %Piece{index: index, begin: begin, block: block}}, %{info_hash: h} = state) do
+    Logger.debug("GOT A PIECE #{inspect {index, begin}}")
     FileManager.write_block(h, index, begin, block)
     :ok = Peer.Manager.Store.incr_downloaded(h, byte_size(block))
     :ok = Peer.Manager.Store.received_block(h, peer_id, {index, begin, block})
+
+    {idx, offset, size} = find_priority_block(h, peer_id)
+    send_msg(h, peer_id, %Request{index: idx, begin: offset, length: size})
 
     {:noreply, state}
   end
@@ -111,6 +125,42 @@ defmodule Peer.Manager do
 
   defp send_msg(info_hash, peer_id, msg) do
     Peer.Registry.lookup(info_hash, peer_id) |> Peer.Connection.send_msg(msg)
+  end
+
+  defp connect_to_peers(info_hash) do
+    1..@max_peers-length(Peer.Registry.lookup(info_hash))
+    |> Enum.each(fn _ ->
+      case Peer.Manager.Store.pop_peer(info_hash) do
+        {host, port} ->
+          Peer.Handshake.Supervisor.connect(host, port, info_hash)
+        nil ->
+          Logger.debug("No more available peers")
+      end
+    end)
+  end
+
+  defp find_priority_block(info_hash, peer_id) do
+    reqs = Peer.Manager.Store.outstanding_requests(info_hash)
+
+    start = System.monotonic_time(:millisecond)
+
+    block = FileManager.pieces(info_hash)
+    |> Enum.with_index
+    |> Enum.flat_map(fn {blocks, piece_idx} ->
+      Enum.map(blocks, &Tuple.insert_at(&1, 0, piece_idx))
+    end)
+    |> Enum.filter(fn {_, _, _, status} -> status == :need end)
+    |> Enum.filter(&!MapSet.member?(reqs, &1))
+    |> Enum.map(&Tuple.delete_at(&1, 3))
+    #Enum.filter(fn {piece_idx, _, _} ->
+      #Peer.Manager.Store.peer_bitfield(info_hash, peer_id)
+      #|> BitSet.get(piece_idx) == 1
+    #end)
+    |> List.first
+
+    IO.puts(System.monotonic_time(:millisecond) - start)
+
+    block
   end
 
   defp via(info_hash) do
