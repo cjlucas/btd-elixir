@@ -127,6 +127,13 @@ defmodule Peer.Manager.Store do
     end)
   end
 
+  @spec remove_peer(binary, binary) :: :ok
+  def remove_peer(info_hash, peer_id) do
+    via(info_hash) |> Agent.update(fn %{outstanding_reqs: reqs} = state ->
+      %{state | outstanding_reqs: Map.delete(reqs, peer_id)}
+    end)
+  end
+
   defp via(info_hash) do
     {:via, Registry, {Peer.Manager.Store.Registry, {:info_hash, info_hash}}}
   end

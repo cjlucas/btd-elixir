@@ -33,7 +33,8 @@ defmodule Peer.Manager do
     {:noreply, state}
   end
 
-  def handle_info({:peer_disconnected, _peer_id}, state) do
+  def handle_info({:peer_disconnected, peer_id}, %{info_hash: h} = state) do
+    :ok = Peer.Manager.Store.remove_peer(h, peer_id)
     {:noreply, state}
   end
 
