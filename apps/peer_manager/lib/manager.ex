@@ -3,18 +3,15 @@ defmodule Peer.Manager do
   require Logger
   alias Bittorrent.Message.{Bitfield, Unchoke, Request, Interested, Piece, Have}
 
-  @name __MODULE__
-
   defmodule State do
     defstruct info_hash: <<>>, pieces: [], num_pieces: 0
   end
 
   def start_link(info_hash) do
-    GenServer.start_link(@name, info_hash)
+    GenServer.start_link(__MODULE__, info_hash, name: via(info_hash))
   end
 
   def init(info_hash) do
-    Registry.register(Peer.Manager.Registry, info_hash, [])
     {:ok, _} = Peer.EventManager.register(info_hash)
     {:ok, _} = File.EventManager.register(info_hash)
 
@@ -125,5 +122,9 @@ defmodule Peer.Manager do
 
   defp send_msg(info_hash, peer_id, msg) do
     Peer.Registry.lookup(info_hash, peer_id) |> Peer.Connection.send_msg(msg)
+  end
+
+  defp via(info_hash) do
+    {:via, Registry, {Peer.Manager.Registry, info_hash}}
   end
 end
