@@ -1,4 +1,8 @@
 defmodule Peer.Manager.Store do
+  defmodule PeerInfo do
+    defstruct bitfield: %BitSet{}, outstanding_reqs: MapSet.new
+  end
+
   defmodule State do
     defstruct skey_hash: <<>>,
     peer_id: <<>>,
@@ -7,7 +11,7 @@ defmodule Peer.Manager.Store do
     peers: MapSet.new,
     downloaded: 0,
     uploaded: 0,
-    outstanding_reqs: %{} # peer id => MapSet of {idx, offset, size}
+    connected_peers: %{} # peer_id => PeerInfo
   end
 
   def start_link(info_hash) do
@@ -97,24 +101,23 @@ defmodule Peer.Manager.Store do
 
   @spec requested_block(binary, binary, {number, number, number}) :: :ok
   def requested_block(info_hash, peer_id, block) do
-    via(info_hash) |> Agent.update(fn %{outstanding_reqs: reqs} = state ->
-      reqs = Map.update(reqs, peer_id, MapSet.new([block]), &MapSet.put(&1, block))
-      %{state | outstanding_reqs: reqs}
+    update_connected_peer(info_hash, peer_id, fn %{outstanding_reqs: reqs} = info ->
+      %{info | outstanding_reqs: MapSet.put(reqs, block)}
     end)
   end
 
   @spec received_block(binary, binary, {number, number, number}) :: :ok
   def received_block(info_hash, peer_id, block) do
-    via(info_hash) |> Agent.update(fn %{outstanding_reqs: reqs} = state ->
-      reqs = Map.update(reqs, peer_id, MapSet.new, &MapSet.delete(&1, block))
-      %{state | outstanding_reqs: reqs}
+    update_connected_peer(info_hash, peer_id, fn %{outstanding_reqs: reqs} = info ->
+      %{info | outstanding_reqs: MapSet.delete(reqs, block)}
     end)
   end
 
   @spec outstanding_requests(binary) :: [{number, number, number}]
   def outstanding_requests(info_hash) do
-    via(info_hash) |> Agent.get(fn %{outstanding_reqs: reqs} ->
-      Enum.reduce(reqs, MapSet.new, fn {_peer_id, reqs}, agg ->
+    via(info_hash) |> Agent.get(fn %{connected_peers: peers} ->
+      Map.values(peers)
+      |> Enum.reduce(MapSet.new, fn %{outstanding_reqs: reqs}, agg ->
         MapSet.union(agg, reqs)
       end)
     end)
@@ -122,15 +125,28 @@ defmodule Peer.Manager.Store do
 
   @spec outstanding_requests(binary, binary) :: [{number, number, number}]
   def outstanding_requests(info_hash, peer_id) do
-    via(info_hash) |> Agent.get(fn %{outstanding_reqs: reqs} ->
-      Map.get(reqs, peer_id, MapSet.new)
+    get_connected_peer(info_hash, peer_id, fn %{outstanding_reqs: reqs} ->
+      reqs
     end)
   end
 
   @spec remove_peer(binary, binary) :: :ok
   def remove_peer(info_hash, peer_id) do
-    via(info_hash) |> Agent.update(fn %{outstanding_reqs: reqs} = state ->
-      %{state | outstanding_reqs: Map.delete(reqs, peer_id)}
+    via(info_hash) |> Agent.update(fn %{connected_peers: peers} = state ->
+      %{state | connected_peers: Map.delete(peers, peer_id)}
+    end)
+  end
+
+  defp get_connected_peer(info_hash, peer_id, fun) do
+    via(info_hash) |> Agent.get(fn %{connected_peers: peers} ->
+      Map.get(peers, peer_id, %PeerInfo{}) |> fun.()
+    end)
+  end
+
+  defp update_connected_peer(info_hash, peer_id, fun) do
+    via(info_hash) |> Agent.update(fn %{connected_peers: peers} = state ->
+      peer_info = Map.get(peers, peer_id, %PeerInfo{}) |> fun.()
+      %{state | connected_peers: Map.put(peers, peer_id, peer_info)}
     end)
   end
 
