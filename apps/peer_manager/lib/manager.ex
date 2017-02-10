@@ -11,6 +11,10 @@ defmodule Peer.Manager do
     GenServer.start_link(__MODULE__, info_hash, name: via(info_hash))
   end
 
+  def add_peers(info_hash, peers) do
+    via(info_hash) |> GenServer.call({:add_peers, peers})
+  end
+
   def init(info_hash) do
     {:ok, _} = Peer.EventManager.register(info_hash)
     {:ok, _} = File.EventManager.register(info_hash)
@@ -24,6 +28,10 @@ defmodule Peer.Manager do
       |> elem(0)
 
     {:ok, %State{info_hash: info_hash, pieces: pieces, num_pieces: length(FileManager.pieces(info_hash))}}
+  end
+
+  def handle_call({:add_peers, peers}, _from, %{info_hash: h} = state) do
+    {:reply, Peer.Manager.Store.add_peers(h, peers), state}
   end
 
   def handle_info({:peer_connected, _peer_id}, state) do

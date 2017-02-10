@@ -36,6 +36,6 @@ defmodule PeerManager do
 
   @spec add_peers(binary, [{String.t, integer}]) :: :ok
   def add_peers(info_hash, peers) do
-    Peer.Manager.Store.add_peers(info_hash, peers)
+    Peer.Manager.add_peers(info_hash, peers)
   end
 end
