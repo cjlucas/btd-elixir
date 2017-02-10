@@ -4,7 +4,7 @@ defmodule Peer.Manager do
   alias Bittorrent.Message.{Bitfield, Unchoke, Request, Interested, Piece, Have}
 
   defmodule State do
-    defstruct info_hash: <<>>, pieces: [], num_pieces: 0
+    defstruct info_hash: <<>>
   end
 
   def start_link(info_hash) do
@@ -19,15 +19,7 @@ defmodule Peer.Manager do
     {:ok, _} = Peer.EventManager.register(info_hash)
     {:ok, _} = File.EventManager.register(info_hash)
 
-    pieces =
-      FileManager.pieces(info_hash)
-      |> Enum.flat_map_reduce(0, fn blocks, i ->
-        blocks = Enum.map(blocks, fn {offset, size, _} -> {i, offset, size} end)
-        {blocks, i + 1}
-      end)
-      |> elem(0)
-
-    {:ok, %State{info_hash: info_hash, pieces: pieces, num_pieces: length(FileManager.pieces(info_hash))}}
+    {:ok, %State{info_hash: info_hash}}
   end
 
   def handle_call({:add_peers, peers}, _from, %{info_hash: h} = state) do
@@ -43,10 +35,10 @@ defmodule Peer.Manager do
     {:noreply, state}
   end
 
-  def handle_info({:received_message, peer_id, %Bitfield{bitfield: bits}}, %{info_hash: info_hash, num_pieces: n} = state) do
+  def handle_info({:received_message, peer_id, %Bitfield{bitfield: bits}}, %{info_hash: info_hash} = state) do
     bs = BitSet.from_binary(bits)
 
-    0..n-1
+    0..length(FileManager.pieces(info_hash))-1
     |> Enum.map(&{&1, BitSet.get(bs, &1)})
     |> Enum.filter(&elem(&1, 1))
     |> Enum.map(&elem(&1, 0))
@@ -61,27 +53,16 @@ defmodule Peer.Manager do
     {:noreply, state}
   end
 
-  def handle_info({:received_message, peer_id, %Unchoke{}}, %{info_hash: info_hash, pieces: [{index, begin, length} | rest]} = state) do
-    send_msg(info_hash, peer_id, %Request{index: index, begin: begin, length: length})
-    {:noreply, %{state | pieces: rest}}
+  def handle_info({:received_message, _peer_id, %Unchoke{}}, state) do
+    {:noreply, state}
   end
 
-  def handle_info({:received_message, peer_id, %Piece{index: index, begin: begin, block: block}}, %{info_hash: h, pieces: pieces} = state) do
-    pieces =
-      case pieces do
-        [{index, begin, length} | rest] ->
-          send_msg(h, peer_id, %Request{index: index, begin: begin, length: length})
-          rest
-        [] ->
-          Logger.debug("Done sending pieces")
-          []
-      end
-
+  def handle_info({:received_message, peer_id, %Piece{index: index, begin: begin, block: block}}, %{info_hash: h} = state) do
     FileManager.write_block(h, index, begin, block)
     :ok = Peer.Manager.Store.incr_downloaded(h, byte_size(block))
     :ok = Peer.Manager.Store.received_block(h, peer_id, {index, begin, block})
 
-    {:noreply, %{state | pieces: pieces}}
+    {:noreply, state}
   end
 
   def handle_info({:received_message, peer_id, %Request{index: idx, begin: offset, length: len}}, %{info_hash: h} = state) do
