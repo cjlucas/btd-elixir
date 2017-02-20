@@ -48,11 +48,11 @@ defmodule Peer.Manager.NewStoreTest do
 
   test "seen_piece/2 and pieces_by_rarity/1" do
     assert Store.pieces_by_rarity(<<>>) == []
-    assert Store.seen_piece(<<>>, 1) == :ok
+    assert Store.seen_piece(<<>>, <<1>>, 1) == :ok
     assert Store.pieces_by_rarity(<<>>) == [[1]]
-    assert Store.seen_piece(<<>>, 2) == :ok
+    assert Store.seen_piece(<<>>, <<1>>, 2) == :ok
     assert Store.pieces_by_rarity(<<>>) == [[1, 2]]
-    assert Store.seen_piece(<<>>, 1) == :ok
+    assert Store.seen_piece(<<>>, <<1>>, 1) == :ok
     assert Store.pieces_by_rarity(<<>>) == [[1], [2]]
   end
 
@@ -80,5 +80,14 @@ defmodule Peer.Manager.NewStoreTest do
     assert Store.received_block(<<>>, <<2>>, {0, 0, 3}) == :ok
     assert Store.outstanding_requests(<<>>) |> MapSet.size == 0
     assert Store.outstanding_requests(<<>>, <<1>>) |> MapSet.size == 0
+  end
+
+  test "set_missing_blocks/2 and pop_missing_block/2" do
+    blocks = [{1, 0, 0}, {0, 0, 0}]
+    assert Store.set_missing_blocks(<<>>, blocks) == :ok
+    assert Store.pop_missing_block(<<>>, 0) == {0, 0, 0}
+    assert Store.pop_missing_block(<<>>, 0) |> is_nil
+    assert Store.pop_missing_block(<<>>, 1) == {1, 0, 0}
+    assert Store.pop_missing_block(<<>>, 1) |> is_nil
   end
 end

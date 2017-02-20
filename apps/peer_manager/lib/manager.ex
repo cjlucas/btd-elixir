@@ -21,6 +21,20 @@ defmodule Peer.Manager do
     {:ok, _} = Peer.EventManager.register(info_hash)
     {:ok, _} = File.EventManager.register(info_hash)
 
+    blocks =
+      FileManager.pieces(info_hash)
+      |> Enum.with_index
+      |> Enum.flat_map(fn {blocks, piece_idx} ->
+        Enum.map(blocks, &Tuple.insert_at(&1, 0, piece_idx))
+      end)
+      |> Enum.filter(fn {_, _, _, status} -> status == :need end)
+      |> Enum.map(&Tuple.delete_at(&1, 3))
+
+
+    IO.puts(inspect blocks)
+
+    :ok = Peer.Manager.Store.set_missing_blocks(info_hash, blocks)
+
     {:ok, %State{info_hash: info_hash}}
   end
 
@@ -73,8 +87,13 @@ defmodule Peer.Manager do
     :ok = Peer.Manager.Store.incr_downloaded(h, byte_size(block))
     :ok = Peer.Manager.Store.received_block(h, peer_id, {index, begin, block})
 
-    {idx, offset, size} = find_priority_block(h, peer_id)
-    send_msg(h, peer_id, %Request{index: idx, begin: offset, length: size})
+    case Peer.Manager.Store.pop_missing_block(h, peer_id, index) do
+      {idx, offset, size} ->
+        send_msg(h, peer_id, %Request{index: idx, begin: offset, length: size})
+      nil ->
+        IO.puts("GUESS WE'RE DONE")
+    end
+
 
     {:noreply, state}
   end
@@ -140,26 +159,11 @@ defmodule Peer.Manager do
   end
 
   defp find_priority_block(info_hash, peer_id) do
-    reqs = Peer.Manager.Store.outstanding_requests(info_hash)
-
     start = System.monotonic_time(:millisecond)
 
-    block = FileManager.pieces(info_hash)
-    |> Enum.with_index
-    |> Enum.flat_map(fn {blocks, piece_idx} ->
-      Enum.map(blocks, &Tuple.insert_at(&1, 0, piece_idx))
-    end)
-    |> Enum.filter(fn {_, _, _, status} -> status == :need end)
-    |> Enum.filter(&!MapSet.member?(reqs, &1))
-    |> Enum.map(&Tuple.delete_at(&1, 3))
-    #Enum.filter(fn {piece_idx, _, _} ->
-      #Peer.Manager.Store.peer_bitfield(info_hash, peer_id)
-      #|> BitSet.get(piece_idx) == 1
-    #end)
-    |> List.first
+    block = Peer.Manager.Store.pop_missing_block(info_hash, peer_id)
 
-    IO.puts(System.monotonic_time(:millisecond) - start)
-
+    IO.puts("find prio #{System.monotonic_time(:millisecond) - start}")
     block
   end
 

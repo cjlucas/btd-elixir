@@ -1,6 +1,6 @@
 defmodule Peer.Manager.Store do
   defmodule PeerInfo do
-    defstruct bitfield: %BitSet{}, outstanding_reqs: MapSet.new
+    defstruct bitfield: MapSet.new, outstanding_reqs: MapSet.new
   end
 
   defmodule State do
@@ -11,6 +11,7 @@ defmodule Peer.Manager.Store do
     peers: MapSet.new,
     downloaded: 0,
     uploaded: 0,
+    missing_blocks: %{}, # piece_id => [block]
     connected_peers: %{} # peer_id => PeerInfo
   end
 
@@ -72,31 +73,21 @@ defmodule Peer.Manager.Store do
   @spec seen_piece(binary, binary, number) :: :ok
   def seen_piece(info_hash, peer_id, piece_idx) do
     via(info_hash) |> Agent.update(fn %{piece_rarity_map: m} = state ->
-      %{state | piece_rarity_map: Map.update(m, piece_idx, 1, &(&1 + 1)), piece_rarity_tiers: []}
+      m = Map.update(m, piece_idx, 0, &(&1 + 1))
+
+      tiers =
+        m
+        |> Enum.group_by(&elem(&1, 1))
+        |> Enum.sort_by(&elem(&1, 0))
+        |> Enum.map(&elem(&1, 1))
+        |> Enum.map(fn x -> Enum.map(x, &elem(&1, 0)) end)
+        |> Enum.reverse
+
+      %{state | piece_rarity_map: m, piece_rarity_tiers: tiers}
     end)
 
-    #update_connected_peer(info_hash, peer_id, fn %{bitfield: bf} = peer ->
-      #%{peer | bitfield: BitSet.set(bf, piece_idx, 1)}
-    #end)
-  end
-
-  @spec pieces_by_rarity(binary) :: [[number]]
-  def pieces_by_rarity(info_hash) do
-    via(info_hash) |> Agent.get_and_update(fn %{piece_rarity_map: m, piece_rarity_tiers: t} = state ->
-      case t do
-        [] ->
-          tiers =
-            m
-            |> Enum.group_by(&elem(&1, 1))
-            |> Enum.sort_by(&elem(&1, 0))
-            |> Enum.map(&elem(&1, 1))
-            |> Enum.map(fn x -> Enum.map(x, &elem(&1, 0)) end)
-            |> Enum.reverse
-
-          {tiers, %{state | piece_rarity_tiers: tiers}}
-        _ ->
-          {t, state}
-      end
+    update_connected_peer(info_hash, peer_id, fn %{bitfield: bf} = peer ->
+      %{peer | bitfield: MapSet.put(bf, piece_idx)}
     end)
   end
 
@@ -143,6 +134,58 @@ defmodule Peer.Manager.Store do
     via(info_hash) |> Agent.update(fn %{connected_peers: peers} = state ->
       %{state | connected_peers: Map.delete(peers, peer_id)}
     end)
+  end
+
+  @type block :: {piece_idx :: number, offset :: number, size :: number}
+
+  @spec set_missing_blocks(binary, [block]) :: :ok
+  def set_missing_blocks(info_hash, blocks) do
+    via(info_hash) |> Agent.update(fn state ->
+      Map.put(state, :missing_blocks, Enum.group_by(blocks, &elem(&1, 0)))
+    end)
+  end
+
+  def put_missing_block(info_hash, {piece_idx, _, _} = block) do
+    via(info_hash) |> Agent.update(fn %{missing_blocks: blocks} = state ->
+      %{state | missing_blocks: Map.update!(blocks, piece_idx, &[block | &1])}
+    end)
+  end
+
+  def pop_missing_block(info_hash, peer_id, piece_idx) do
+    via(info_hash) |> Agent.get_and_update(fn %{missing_blocks: blocks} = state ->
+      case Map.get(blocks, piece_idx) do
+        [head | tail] ->
+          {head, %{state | missing_blocks: Map.put(blocks, piece_idx, tail)}}
+        [] ->
+          do_pop_missing_block(peer_id, state)
+      end
+    end)
+  end
+
+  def pop_missing_block(info_hash, peer_id) do
+    via(info_hash) |> Agent.get_and_update(fn state ->
+      do_pop_missing_block(peer_id, state)
+    end)
+  end
+
+  defp do_pop_missing_block(peer_id, %{piece_rarity_map: m, missing_blocks: blocks, connected_peers: peers} = state) do
+    %{bitfield: peer_pieces} = Map.get(peers, peer_id)
+
+    piece_idx =
+      m
+      |> Map.keys
+      |> Enum.filter(&MapSet.member?(peer_pieces, &1))
+      |> Enum.drop_while(&Map.get(blocks, &1, []) |> Enum.empty?)
+      |> List.first
+
+    case Map.get(blocks, piece_idx) do
+      [head | tail] ->
+        {head, %{state | missing_blocks: Map.put(blocks, piece_idx, tail)}}
+      [] ->
+        {nil, state}
+      nil ->
+        {nil, state}
+    end
   end
 
   defp get_connected_peer(info_hash, peer_id, fun) do
