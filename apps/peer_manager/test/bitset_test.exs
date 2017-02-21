@@ -28,11 +28,33 @@ defmodule BitSetTest do
     end
   end
 
-  test "from binary" do
+  test "from_binary/1" do
     bs = BitSet.from_binary(<<255, 255>>)
     for x <- 0..15, do: assert BitSet.get(bs, x) == 1
 
     bs = BitSet.from_binary(<<0::16>>)
     for x <- 0..15, do: assert BitSet.get(bs, x) == 0
+  end
+
+  test "from_binary/2" do
+    bs = BitSet.from_binary(16, <<255, 255>>)
+    for x <- 0..15, do: assert BitSet.get(bs, x) == 1
+
+    bs = BitSet.from_binary(16, <<0::16>>)
+    for x <- 0..15, do: assert BitSet.get(bs, x) == 0
+
+    bs = BitSet.from_binary(3, <<0::16>>)
+    for x <- 0..2, do: assert BitSet.get(bs, x) == 0
+  end
+
+  test "Enumerable support" do
+    bs = BitSet.new(8)
+    assert Enum.count(bs) == 8
+
+    assert Enum.member?(bs, 0)
+    refute Enum.member?(bs, 1)
+    refute Enum.member?(bs, 2)
+
+    assert Enum.to_list(bs) == [0, 0, 0, 0, 0, 0, 0, 0]
   end
 end
