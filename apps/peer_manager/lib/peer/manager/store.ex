@@ -70,25 +70,48 @@ defmodule Peer.Manager.Store do
     get_connected_peer(info_hash, peer_id, fn %{bitfield: bf} -> bf end)
   end
 
+  def seen_bitfield(info_hash, peer_id, bitset) do
+    via(info_hash) |> Agent.update(fn %{piece_rarity_map: m} = state ->
+      m =
+        0..Enum.count(bitset)-1
+        |> Enum.reduce(m, fn idx, acc ->
+          Map.update(acc, idx, 0, &(&1 + BitSet.get(bitset, idx)))
+        end)
+
+      %{state | piece_rarity_map: m, piece_rarity_tiers: update_piece_rarity_tiers(m)}
+    end)
+
+    update_connected_peer(info_hash, peer_id, fn peer ->
+      bitfield =
+        0..Enum.count(bitset)-1
+        |> Enum.filter(&BitSet.get(bitset, &1) == 1)
+        |> Enum.reduce(MapSet.new, fn idx, acc ->
+          MapSet.put(acc, idx)
+        end)
+
+      %{peer | bitfield: bitfield}
+    end)
+  end
+
   @spec seen_piece(binary, binary, number) :: :ok
   def seen_piece(info_hash, peer_id, piece_idx) do
     via(info_hash) |> Agent.update(fn %{piece_rarity_map: m} = state ->
       m = Map.update(m, piece_idx, 0, &(&1 + 1))
-
-      tiers =
-        m
-        |> Enum.group_by(&elem(&1, 1))
-        |> Enum.sort_by(&elem(&1, 0))
-        |> Enum.map(&elem(&1, 1))
-        |> Enum.map(fn x -> Enum.map(x, &elem(&1, 0)) end)
-        |> Enum.reverse
-
-      %{state | piece_rarity_map: m, piece_rarity_tiers: tiers}
+      %{state | piece_rarity_map: m, piece_rarity_tiers: update_piece_rarity_tiers(m)}
     end)
 
     update_connected_peer(info_hash, peer_id, fn %{bitfield: bf} = peer ->
       %{peer | bitfield: MapSet.put(bf, piece_idx)}
     end)
+  end
+
+  defp update_piece_rarity_tiers(map) do
+    map
+    |> Enum.group_by(&elem(&1, 1))
+    |> Enum.sort_by(&elem(&1, 0))
+    |> Enum.map(&elem(&1, 1))
+    |> Enum.map(fn x -> Enum.map(x, &elem(&1, 0)) end)
+    |> Enum.reverse
   end
 
   @spec stats(binary) :: [uploaded: integer, downloaded: integer]

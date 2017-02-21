@@ -58,11 +58,7 @@ defmodule Peer.Manager do
   def handle_info({:received_message, peer_id, %Bitfield{bitfield: bits}}, %{info_hash: info_hash} = state) do
     bs = BitSet.from_binary(bits)
 
-    0..length(FileManager.pieces(info_hash))-1
-    |> Enum.map(&{&1, BitSet.get(bs, &1)})
-    |> Enum.filter(&elem(&1, 1))
-    |> Enum.map(&elem(&1, 0))
-    |> Enum.each(&Peer.Manager.Store.seen_piece(info_hash, peer_id, &1))
+    :ok = Peer.Manager.Store.seen_bitfield(info_hash, peer_id, bs)
 
     send_msg(info_hash, peer_id, %Interested{})
     {:noreply, state}
@@ -82,7 +78,7 @@ defmodule Peer.Manager do
   end
 
   def handle_info({:received_message, peer_id, %Piece{index: index, begin: begin, block: block}}, %{info_hash: h} = state) do
-    Logger.debug("GOT A PIECE #{inspect {index, begin}}")
+    #Logger.debug("GOT A PIECE #{inspect {index, begin}}")
     FileManager.write_block(h, index, begin, block)
     :ok = Peer.Manager.Store.incr_downloaded(h, byte_size(block))
     :ok = Peer.Manager.Store.received_block(h, peer_id, {index, begin, block})
