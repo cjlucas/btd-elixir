@@ -76,18 +76,31 @@ defmodule Peer.Manager do
     send_msg(info_hash, peer_id, %Request{index: idx, begin: offset, length: size})
     {:noreply, state}
   end
+
   def handle_info({:received_message, peer_id, %Piece{index: index, begin: begin, block: block}}, %{info_hash: h} = state) do
     #Logger.debug("GOT A PIECE #{inspect {index, begin}}")
     FileManager.write_block(h, index, begin, block)
     :ok = Peer.Manager.Store.incr_downloaded(h, byte_size(block))
-    :ok = Peer.Manager.Store.received_block(h, peer_id, {index, begin, block})
+    :ok = Peer.Manager.Store.received_block(h, peer_id, {index, begin, byte_size(block)})
 
-    case Peer.Manager.Store.pop_missing_block(h, peer_id, index) do
-      {idx, offset, size} ->
-        send_msg(h, peer_id, %Request{index: idx, begin: offset, length: size})
-      nil ->
-        IO.puts("GUESS WE'RE DONE")
-    end
+    timer("here2", fn ->
+      if Peer.Manager.Store.outstanding_requests(h, peer_id) |> Enum.empty? do
+        1..10
+        |> Enum.reduce_while({[], index}, fn _, {blocks, piece_idx} ->
+          case Peer.Manager.Store.pop_missing_block(h, peer_id, piece_idx) do
+            # Keep track of the latest piece index we've received to keep us on the fast path
+            {idx, _, _} = block ->
+              {:cont, {[block | blocks], idx}}
+            nil ->
+              {:halt, {blocks, piece_idx}}
+          end
+        end)
+        |> elem(0)
+        |> Enum.each(fn {idx, offset, size} ->
+          send_msg(h, peer_id, %Request{index: idx, begin: offset, length: size})
+        end)
+      end
+    end)
 
     {:noreply, state}
   end
@@ -159,6 +172,13 @@ defmodule Peer.Manager do
 
     IO.puts("find prio #{System.monotonic_time(:millisecond) - start}")
     block
+  end
+
+  defp timer(label, fun) do
+    unit = :microsecond
+    start = System.monotonic_time(unit)
+    fun.()
+    #IO.puts("#{label}: #{System.monotonic_time(unit) - start}")
   end
 
   defp via(info_hash) do

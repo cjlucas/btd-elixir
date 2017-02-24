@@ -155,8 +155,17 @@ defmodule Peer.Manager.Store do
 
   @spec remove_peer(binary, binary) :: :ok
   def remove_peer(info_hash, peer_id) do
-    via(info_hash) |> Agent.update(fn %{connected_peers: peers} = state ->
-      %{state | connected_peers: Map.delete(peers, peer_id)}
+    via(info_hash) |> Agent.update(fn %{missing_blocks: blocks, connected_peers: peers} = state ->
+      %{outstanding_reqs: reqs} = Map.get(peers, peer_id, %PeerInfo{})
+
+      IO.puts "OMGPEER DISCONNECTED #{inspect reqs}"
+
+      # Add pending requests back into missing blocks pool
+      blocks = reqs |> Enum.reduce(blocks, fn {piece_idx, _, _} = block, acc ->
+        Map.update(acc, piece_idx, [], &([block | &1]))
+      end)
+
+      %{state | missing_blocks: blocks, connected_peers: Map.delete(peers, peer_id)}
     end)
   end
 
@@ -176,10 +185,13 @@ defmodule Peer.Manager.Store do
   end
 
   def pop_missing_block(info_hash, peer_id, piece_idx) do
-    via(info_hash) |> Agent.get_and_update(fn %{missing_blocks: blocks} = state ->
-      case Map.get(blocks, piece_idx) do
+    via(info_hash) |> Agent.get_and_update(fn %{connected_peers: peers, missing_blocks: blocks} = state ->
+      case Map.get(blocks, piece_idx, []) do
         [head | tail] ->
-          {head, %{state | missing_blocks: Map.put(blocks, piece_idx, tail)}}
+          peers = Map.update(peers, peer_id, %PeerInfo{}, fn %{outstanding_reqs: reqs} = peer ->
+            %{peer | outstanding_reqs: MapSet.put(reqs, head)}
+          end)
+          {head, %{state | connected_peers: peers, missing_blocks: Map.put(blocks, piece_idx, tail)}}
         [] ->
           do_pop_missing_block(peer_id, state)
       end
@@ -220,7 +232,10 @@ defmodule Peer.Manager.Store do
 
     case Map.get(blocks, piece_idx) do
       [head | tail] ->
-        {head, %{state | missing_blocks: Map.put(blocks, piece_idx, tail)}}
+        peers = Map.update(peers, peer_id, %PeerInfo{}, fn %{outstanding_reqs: reqs} = peer ->
+          %{peer | outstanding_reqs: MapSet.put(reqs, head)}
+        end)
+        {head, %{state | connected_peers: peers, missing_blocks: Map.put(blocks, piece_idx, tail)}}
       [] ->
         {nil, state}
       nil ->
