@@ -7,7 +7,7 @@ defmodule Peer.Manager.Store do
     defstruct skey_hash: <<>>,
     peer_id: <<>>,
     piece_rarity_map: %{}, # piece # => instances seen
-    piece_rarity_tiers: [], # list of list of piece #s
+    piece_priority_list: [],
     peers: MapSet.new,
     downloaded: 0,
     uploaded: 0,
@@ -78,7 +78,7 @@ defmodule Peer.Manager.Store do
           Map.update(acc, idx, 0, &(&1 + BitSet.get(bitset, idx)))
         end)
 
-      %{state | piece_rarity_map: m, piece_rarity_tiers: update_piece_rarity_tiers(m)}
+      %{state | piece_rarity_map: m, piece_priority_list: update_piece_priority_list(m)}
     end)
 
     update_connected_peer(info_hash, peer_id, fn peer ->
@@ -97,7 +97,7 @@ defmodule Peer.Manager.Store do
   def seen_piece(info_hash, peer_id, piece_idx) do
     via(info_hash) |> Agent.update(fn %{piece_rarity_map: m} = state ->
       m = Map.update(m, piece_idx, 0, &(&1 + 1))
-      %{state | piece_rarity_map: m, piece_rarity_tiers: update_piece_rarity_tiers(m)}
+      %{state | piece_rarity_map: m, piece_priority_list: update_piece_priority_list(m)}
     end)
 
     update_connected_peer(info_hash, peer_id, fn %{bitfield: bf} = peer ->
@@ -105,13 +105,14 @@ defmodule Peer.Manager.Store do
     end)
   end
 
-  defp update_piece_rarity_tiers(map) do
+  defp update_piece_priority_list(map) do
     map
     |> Enum.group_by(&elem(&1, 1))
     |> Enum.sort_by(&elem(&1, 0))
     |> Enum.map(&elem(&1, 1))
-    |> Enum.map(fn x -> Enum.map(x, &elem(&1, 0)) end)
     |> Enum.reverse
+    |> List.flatten
+    |> Enum.map(&elem(&1, 0))
   end
 
   @spec stats(binary) :: [uploaded: integer, downloaded: integer]
@@ -191,15 +192,31 @@ defmodule Peer.Manager.Store do
     end)
   end
 
-  defp do_pop_missing_block(peer_id, %{piece_rarity_map: m, missing_blocks: blocks, connected_peers: peers} = state) do
+  @limit 100
+
+  defp do_pop_missing_block(peer_id, %{piece_priority_list: m, missing_blocks: blocks, connected_peers: peers} = state) do
     %{bitfield: peer_pieces} = Map.get(peers, peer_id)
 
-    piece_idx =
+    candidates =
       m
-      |> Map.keys
-      |> Enum.filter(&MapSet.member?(peer_pieces, &1))
-      |> Enum.drop_while(&Map.get(blocks, &1, []) |> Enum.empty?)
-      |> List.first
+      |> Enum.reduce_while([], fn idx, acc ->
+        acc = if MapSet.member?(peer_pieces, idx) && !(Map.get(blocks, idx, []) |> Enum.empty?) do
+          [idx | acc]
+        else
+          acc
+        end
+
+        if length(acc) == @limit do
+          {:halt, acc}
+        else
+          {:cont, acc}
+        end
+      end)
+
+    piece_idx = case candidates do
+      [] -> nil
+      c  -> Enum.random(c)
+    end
 
     case Map.get(blocks, piece_idx) do
       [head | tail] ->

@@ -76,7 +76,6 @@ defmodule Peer.Manager do
     send_msg(info_hash, peer_id, %Request{index: idx, begin: offset, length: size})
     {:noreply, state}
   end
-
   def handle_info({:received_message, peer_id, %Piece{index: index, begin: begin, block: block}}, %{info_hash: h} = state) do
     #Logger.debug("GOT A PIECE #{inspect {index, begin}}")
     FileManager.write_block(h, index, begin, block)
@@ -89,7 +88,6 @@ defmodule Peer.Manager do
       nil ->
         IO.puts("GUESS WE'RE DONE")
     end
-
 
     {:noreply, state}
   end
