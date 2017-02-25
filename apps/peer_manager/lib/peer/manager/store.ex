@@ -207,7 +207,7 @@ defmodule Peer.Manager.Store do
   @limit 100
 
   defp do_pop_missing_block(peer_id, %{piece_priority_list: m, missing_blocks: blocks, connected_peers: peers} = state) do
-    %{bitfield: peer_pieces} = Map.get(peers, peer_id)
+    %{bitfield: peer_pieces} = Map.get(peers, peer_id, %PeerInfo{})
 
     candidates =
       m
