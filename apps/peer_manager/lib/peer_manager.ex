@@ -19,8 +19,8 @@ defmodule PeerManager do
   end
 
   def register(info_hash) do
-    {:ok, _} = Peer.Manager.Supervisor.start_child(info_hash)
     {:ok, _} = Peer.Manager.Store.Supervisor.start_child(info_hash)
+    {:ok, _} = Peer.Manager.Supervisor.start_child(info_hash)
     :ok
   end
 
@@ -36,6 +36,6 @@ defmodule PeerManager do
 
   @spec add_peers(binary, [{String.t, integer}]) :: :ok
   def add_peers(info_hash, peers) do
-    Peer.Manager.Store.add_peers(info_hash, peers)
+    Peer.Manager.add_peers(info_hash, peers)
   end
 end

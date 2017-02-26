@@ -45,4 +45,41 @@ defmodule Peer.Manager.NewStoreTest do
     assert Store.incr_downloaded(<<>>, 10) == :ok
     assert Store.stats(<<>>) == [uploaded: 15, downloaded: 15]
   end
+
+  test "requested_block/3, received_block/3, outstanding_requests/1 and outstanding_requests/2" do
+    assert Store.outstanding_requests(<<>>) |> MapSet.size == 0
+    assert Store.outstanding_requests(<<>>, <<1>>) |> MapSet.size == 0
+
+    assert Store.requested_block(<<>>, <<1>>, {0, 0, 3}) == :ok
+    assert Store.outstanding_requests(<<>>) == MapSet.new([{0, 0, 3}])
+    assert Store.outstanding_requests(<<>>, <<1>>) == MapSet.new([{0, 0, 3}])
+
+    assert Store.requested_block(<<>>, <<1>>, {1, 0, 3}) == :ok
+    assert Store.outstanding_requests(<<>>) == MapSet.new([{0, 0, 3}, {1, 0, 3}])
+    assert Store.outstanding_requests(<<>>, <<1>>) == MapSet.new([{0, 0, 3}, {1, 0, 3}])
+
+    assert Store.requested_block(<<>>, <<2>>, {0, 0, 3}) == :ok
+    assert Store.outstanding_requests(<<>>) == MapSet.new([{0, 0, 3}, {1, 0, 3}])
+    assert Store.outstanding_requests(<<>>, <<2>>) == MapSet.new([{0, 0, 3}])
+
+    assert Store.received_block(<<>>, <<1>>, {0, 0, 3}) == :ok
+    assert Store.outstanding_requests(<<>>) == MapSet.new([{0, 0, 3}, {1, 0, 3}])
+    assert Store.outstanding_requests(<<>>, <<1>>) == MapSet.new([{1, 0, 3}])
+
+    assert Store.received_block(<<>>, <<1>>, {1, 0, 3}) == :ok
+    assert Store.received_block(<<>>, <<2>>, {0, 0, 3}) == :ok
+    assert Store.outstanding_requests(<<>>) |> MapSet.size == 0
+    assert Store.outstanding_requests(<<>>, <<1>>) |> MapSet.size == 0
+  end
+
+  test "seen_piece/2 and set_missing_blocks/2 and pop_missing_block/2" do
+    blocks = [{1, 0, 0}, {0, 0, 0}]
+
+    assert Store.seen_piece(<<>>, <<1>>, 0) == :ok
+    assert Store.seen_piece(<<>>, <<1>>, 1) == :ok
+    assert Store.set_missing_blocks(<<>>, blocks) == :ok
+    assert Store.pop_missing_block(<<>>, <<1>>, 0) == {0, 0, 0}
+    assert Store.pop_missing_block(<<>>, <<1>>, 0) == {1, 0, 0}
+    assert Store.pop_missing_block(<<>>, <<1>>, 1) |> is_nil
+  end
 end

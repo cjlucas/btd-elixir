@@ -3,65 +3,106 @@ defmodule Peer.Manager do
   require Logger
   alias Bittorrent.Message.{Bitfield, Unchoke, Request, Interested, Piece, Have}
 
-  @name __MODULE__
+  @max_peers 50
 
   defmodule State do
-    defstruct info_hash: <<>>, pieces: []
+    defstruct info_hash: <<>>
   end
 
   def start_link(info_hash) do
-    GenServer.start_link(@name, info_hash)
+    GenServer.start_link(__MODULE__, info_hash, name: via(info_hash))
+  end
+
+  def add_peers(info_hash, peers) do
+    via(info_hash) |> GenServer.call({:add_peers, peers})
   end
 
   def init(info_hash) do
-    Registry.register(Peer.Manager.Registry, info_hash, [])
     {:ok, _} = Peer.EventManager.register(info_hash)
     {:ok, _} = File.EventManager.register(info_hash)
 
-    pieces =
+    blocks =
       FileManager.pieces(info_hash)
-      |> Enum.flat_map_reduce(0, fn blocks, i ->
-        blocks = Enum.map(blocks, fn {offset, size, _} -> {i, offset, size} end)
-        {blocks, i + 1}
+      |> Enum.with_index
+      |> Enum.flat_map(fn {blocks, piece_idx} ->
+        Enum.map(blocks, &Tuple.insert_at(&1, 0, piece_idx))
       end)
-      |> elem(0)
+      |> Enum.filter(fn {_, _, _, status} -> status == :need end)
+      |> Enum.map(&Tuple.delete_at(&1, 3))
 
-    {:ok, %State{info_hash: info_hash, pieces: pieces}}
+
+    IO.puts(inspect blocks)
+
+    :ok = Peer.Manager.Store.set_missing_blocks(info_hash, blocks)
+
+    {:ok, %State{info_hash: info_hash}}
   end
 
-  def handle_info({:peer_connected, _peer_id}, state) do
+  def handle_call({:add_peers, peers}, _from, %{info_hash: h} = state) do
+    :ok = Peer.Manager.Store.add_peers(h, peers)
+    connect_to_peers(h)
+
+    {:reply, :ok, state}
+  end
+
+  def handle_info({:peer_connected, peer_id}, state) do
+    IO.puts("GOT PEER #{inspect peer_id}")
     {:noreply, state}
   end
 
-  def handle_info({:peer_disconnected, _peer_id}, state) do
+  def handle_info({:peer_disconnected, peer_id}, %{info_hash: h} = state) do
+    :ok = Peer.Manager.Store.remove_peer(h, peer_id)
     {:noreply, state}
   end
 
-  def handle_info({:received_message, peer_id, %Bitfield{}}, %{info_hash: info_hash} = state) do
+  def handle_info({:received_message, peer_id, %Bitfield{bitfield: bits}}, %{info_hash: info_hash} = state) do
+    bs = BitSet.from_binary(bits)
+
+    :ok = Peer.Manager.Store.seen_bitfield(info_hash, peer_id, bs)
+
     send_msg(info_hash, peer_id, %Interested{})
     {:noreply, state}
   end
 
-  def handle_info({:received_message, peer_id, %Unchoke{}}, %{info_hash: info_hash, pieces: [{index, begin, length} | rest]} = state) do
-    send_msg(info_hash, peer_id, %Request{index: index, begin: begin, length: length})
-    {:noreply, %{state | pieces: rest}}
+  def handle_info({:received_message, peer_id, %Have{index: idx}}, %{info_hash: info_hash} = state) do
+    :ok = Peer.Manager.Store.seen_piece(info_hash, peer_id, idx)
+    {:noreply, state}
   end
 
-  def handle_info({:received_message, peer_id, %Piece{index: index, begin: begin, block: block}}, %{info_hash: h, pieces: pieces} = state) do
-    pieces =
-      case pieces do
-        [{index, begin, length} | rest] ->
-          send_msg(h, peer_id, %Request{index: index, begin: begin, length: length})
-          rest
-        [] ->
-          Logger.debug("Done sending pieces")
-          []
-      end
+  def handle_info({:received_message, peer_id, %Unchoke{}}, %{info_hash: info_hash} = state) do
+    Logger.debug("GOT UNCHOKE #{inspect peer_id}")
+    {idx, offset, size} = block = find_priority_block(info_hash, peer_id)
+    Logger.debug("GOT A PRIORITY BLOCK #{inspect block}")
+    send_msg(info_hash, peer_id, %Request{index: idx, begin: offset, length: size})
+    {:noreply, state}
+  end
 
+  def handle_info({:received_message, peer_id, %Piece{index: index, begin: begin, block: block}}, %{info_hash: h} = state) do
+    #Logger.debug("GOT A PIECE #{inspect {index, begin}}")
     FileManager.write_block(h, index, begin, block)
     :ok = Peer.Manager.Store.incr_downloaded(h, byte_size(block))
+    :ok = Peer.Manager.Store.received_block(h, peer_id, {index, begin, byte_size(block)})
 
-    {:noreply, %{state | pieces: pieces}}
+    timer("here2", fn ->
+      if Peer.Manager.Store.outstanding_requests(h, peer_id) |> Enum.empty? do
+        1..10
+        |> Enum.reduce_while({[], index}, fn _, {blocks, piece_idx} ->
+          case Peer.Manager.Store.pop_missing_block(h, peer_id, piece_idx) do
+            # Keep track of the latest piece index we've received to keep us on the fast path
+            {idx, _, _} = block ->
+              {:cont, {[block | blocks], idx}}
+            nil ->
+              {:halt, {blocks, piece_idx}}
+          end
+        end)
+        |> elem(0)
+        |> Enum.each(fn {idx, offset, size} ->
+          send_msg(h, peer_id, %Request{index: idx, begin: offset, length: size})
+        end)
+      end
+    end)
+
+    {:noreply, state}
   end
 
   def handle_info({:received_message, peer_id, %Request{index: idx, begin: offset, length: len}}, %{info_hash: h} = state) do
@@ -81,6 +122,11 @@ defmodule Peer.Manager do
 
   def handle_info({:sent_message, _peer_id, %Piece{block: block}}, %{info_hash: h} = state) do
     Peer.Manager.Store.incr_uploaded(h, byte_size(block))
+    {:noreply, state}
+  end
+
+  def handle_info({:sent_message, peer_id, %Request{index: idx, begin: offset, length: len}}, %{info_hash: h} = state) do
+    :ok = Peer.Manager.Store.requested_block(h, peer_id, {idx, offset, len})
     {:noreply, state}
   end
 
@@ -105,5 +151,37 @@ defmodule Peer.Manager do
 
   defp send_msg(info_hash, peer_id, msg) do
     Peer.Registry.lookup(info_hash, peer_id) |> Peer.Connection.send_msg(msg)
+  end
+
+  defp connect_to_peers(info_hash) do
+    1..@max_peers-length(Peer.Registry.lookup(info_hash))
+    |> Enum.each(fn _ ->
+      case Peer.Manager.Store.pop_peer(info_hash) do
+        {host, port} ->
+          Peer.Handshake.Supervisor.connect(host, port, info_hash)
+        nil ->
+          Logger.debug("No more available peers")
+      end
+    end)
+  end
+
+  defp find_priority_block(info_hash, peer_id) do
+    start = System.monotonic_time(:millisecond)
+
+    block = Peer.Manager.Store.pop_missing_block(info_hash, peer_id)
+
+    IO.puts("find prio #{System.monotonic_time(:millisecond) - start}")
+    block
+  end
+
+  defp timer(label, fun) do
+    unit = :microsecond
+    start = System.monotonic_time(unit)
+    fun.()
+    #IO.puts("#{label}: #{System.monotonic_time(unit) - start}")
+  end
+
+  defp via(info_hash) do
+    {:via, Registry, {Peer.Manager.Registry, info_hash}}
   end
 end
