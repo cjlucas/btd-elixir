@@ -16,7 +16,7 @@ receive do
     IO.puts("host: #{host} port: #{port}")
     Peer.Handshake.Supervisor.connect(host, port, info_hash)
 
-    #:ok = PeerManager.add_peers(torrent.info_hash, resp.peers)
+    :ok = PeerManager.add_peers(torrent.info_hash, resp.peers)
     Process.sleep(:infinity)
 after
   5000 -> IO.puts("timed out")
