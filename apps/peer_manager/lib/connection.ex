@@ -71,6 +71,7 @@ defmodule Peer.Connection do
     #{:ok, {host, port}} = :inet.peername(sock.sock)
     #host = host |> Tuple.to_list |> Enum.join(".")
     Peer.Registry.register(info_hash, peer_id)
+    :ok = Peer.Swarm.Registry.register(info_hash, peer_id)
     Peer.EventManager.peer_connected(info_hash, peer_id)
 
     pid = self()

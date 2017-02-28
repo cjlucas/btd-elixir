@@ -5,6 +5,7 @@ defmodule PeerManager do
     import Supervisor.Spec, warn: false
 
     children = [
+      supervisor(Peer.Swarm.Registry, []),
       worker(Peer.Registry, []),
       worker(Peer.EventManager, []),
       supervisor(Peer.Handshake.Supervisor, []),
