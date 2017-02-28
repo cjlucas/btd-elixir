@@ -30,7 +30,6 @@ defmodule Peer.Manager do
       |> Enum.filter(fn {_, _, _, status} -> status == :need end)
       |> Enum.map(&Tuple.delete_at(&1, 3))
 
-
     IO.puts(inspect blocks)
 
     :ok = Peer.Manager.Store.set_missing_blocks(info_hash, blocks)
@@ -146,15 +145,16 @@ defmodule Peer.Manager do
   end
 
   defp dispatch_msg(info_hash, msg) do
-    Peer.Registry.lookup(info_hash) |> Enum.each(&Peer.Connection.send_msg(&1, msg))
+    Peer.Swarm.Registry.lookup(info_hash)
+    |> Enum.each(&Peer.Connection.send_msg(info_hash, &1, msg))
   end
 
   defp send_msg(info_hash, peer_id, msg) do
-    Peer.Registry.lookup(info_hash, peer_id) |> Peer.Connection.send_msg(msg)
+    Peer.Connection.send_msg(info_hash, peer_id, msg)
   end
 
   defp connect_to_peers(info_hash) do
-    1..@max_peers-length(Peer.Registry.lookup(info_hash))
+    1..@max_peers-length(Peer.Swarm.Registry.lookup(info_hash))
     |> Enum.each(fn _ ->
       case Peer.Manager.Store.pop_peer(info_hash) do
         {host, port} ->

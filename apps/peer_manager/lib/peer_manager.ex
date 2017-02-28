@@ -6,7 +6,7 @@ defmodule PeerManager do
 
     children = [
       supervisor(Peer.Swarm.Registry, []),
-      worker(Peer.Registry, []),
+      registry(:unique, Peer.Registry),
       worker(Peer.EventManager, []),
       supervisor(Peer.Handshake.Supervisor, []),
       supervisor(Peer.Connection.Supervisor, []),
@@ -17,6 +17,10 @@ defmodule PeerManager do
     ]
 
     Supervisor.start_link(children, [strategy: :one_for_one])
+  end
+
+  defp registry(kind, registry) do
+    Supervisor.Spec.supervisor(Registry, [kind, registry], id: registry)
   end
 
   def register(info_hash) do

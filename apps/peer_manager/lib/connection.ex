@@ -56,21 +56,21 @@ defmodule Peer.Connection do
   end
 
   def start_link(info_hash, peer_id, sock, initial_data) do
-    GenServer.start_link(__MODULE__, {info_hash, peer_id, sock, initial_data})
+    name = via(info_hash, peer_id)
+    GenServer.start_link(__MODULE__, {info_hash, peer_id, sock, initial_data}, name: name)
   end
 
-  def send_msg(pid, msg) do
-    GenServer.cast(pid, {:send_msg, msg})
+  def send_msg(info_hash, peer_id, msg) do
+    via(info_hash, peer_id) |> GenServer.cast({:send_msg, msg})
   end
 
-  def has_piece?(pid, idx) do
-    GenServer.call(pid, {:has_piece?, idx})
+  def has_piece?(info_hash, peer_id, idx) do
+    via(info_hash, peer_id) |> GenServer.cast({:has_piece?, idx})
   end
 
   def init({info_hash, peer_id, %{sock: s} = sock, initial_data}) do
     #{:ok, {host, port}} = :inet.peername(sock.sock)
     #host = host |> Tuple.to_list |> Enum.join(".")
-    Peer.Registry.register(info_hash, peer_id)
     :ok = Peer.Swarm.Registry.register(info_hash, peer_id)
     Peer.EventManager.peer_connected(info_hash, peer_id)
 
@@ -189,5 +189,10 @@ defmodule Peer.Connection do
 
   defp handle_msg(_msg, state) do
     {:noreply, state}
+  end
+
+  defp via(info_hash, peer_id) do
+    key = {info_hash, peer_id}
+    {:via, Registry, {Peer.Registry, key}}
   end
 end
