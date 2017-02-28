@@ -37,7 +37,7 @@ end
 defmodule Peer.Connection do
   use GenServer
   require Logger
-  alias Bittorrent.Message.{Bitfield, Choke, Unchoke, Interested, NotInterested}
+  alias Bittorrent.Message.{Bitfield, Have, Choke, Unchoke, Interested, NotInterested}
 
   defmodule State do
 
@@ -148,7 +148,26 @@ defmodule Peer.Connection do
   end
 
   defp handle_msg(%Bitfield{bitfield: bits}, state) do
-    {:noreply, %{state | bitfield: BitSet.from_binary(bits)}}
+    %{info_hash: info_hash} = state
+
+    bs = BitSet.from_binary(bits)
+    piece_idxs =
+      bs
+      |> Enum.to_list
+      |> Enum.with_index
+      |> Enum.filter(&elem(&1, 0) == 1)
+      |> Enum.map(&elem(&1, 1))
+
+    :ok = Peer.PieceRarity.seen_pieces(info_hash, piece_idxs)
+
+    {:noreply, %{state | bitfield: bs}}
+  end
+
+  defp handle_msg(%Have{index: idx}, state) do
+    %{info_hash: info_hash, bitfield: bf} = state
+    :ok = Peer.PieceRarity.seen_pieces(info_hash, idx)
+
+    {:noreply, %{state | bitfield: BitSet.set(bf, idx, 1)}}
   end
 
   defp handle_msg(%Choke{}, state) do
