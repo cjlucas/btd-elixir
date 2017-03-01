@@ -46,7 +46,6 @@ defmodule Peer.Connection do
     defstruct info_hash: <<>>,
       peer_id: <<>>,
       sock: nil,
-      bitfield: nil,
       choked: true,
       interested: false,
       requests: MapSet.new,
@@ -126,13 +125,6 @@ defmodule Peer.Connection do
     {:stop, :normal, state}
   end
 
-  def handle_call({:has_piece?, _idx}, _from, %{bitfield: bits} = state) when is_nil(bits) do
-    {:reply, false, state}
-  end
-  def handle_call({:has_piece?, idx}, _from, %{bitfield: bits} = state) do
-    {:reply, BitSet.get(bits, idx) == 1, state}
-  end
-
   def handle_cast({:send_msg, msg}, state) do
     %{info_hash: hash, peer_id: id, requests: requests, sock: sock} = state
 
@@ -174,14 +166,14 @@ defmodule Peer.Connection do
 
     :ok = Peer.Swarm.PieceSet.seen_pieces(info_hash, peer_id, piece_idxs)
 
-    {:noreply, %{state | bitfield: bs}}
+    {:noreply, state}
   end
 
   defp handle_msg(%Have{index: idx}, state) do
-    %{info_hash: info_hash, peer_id: peer_id, bitfield: bf} = state
+    %{info_hash: info_hash, peer_id: peer_id} = state
     :ok = Peer.Swarm.PieceSet.seen_pieces(info_hash, peer_id, idx)
 
-    {:noreply, %{state | bitfield: BitSet.set(bf, idx, 1)}}
+    {:noreply, state}
   end
 
   defp handle_msg(%Choke{}, state) do

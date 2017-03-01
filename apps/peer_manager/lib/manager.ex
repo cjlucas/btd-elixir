@@ -1,7 +1,7 @@
 defmodule Peer.Manager do
   use GenServer
   require Logger
-  alias Bittorrent.Message.{Bitfield, Unchoke, Request, Interested, Piece, Have}
+  alias Bittorrent.Message.{Bitfield, Request, Interested, Piece, Have}
 
   @max_peers 50
 
