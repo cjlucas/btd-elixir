@@ -76,6 +76,7 @@ defmodule Peer.Manager do
     {:noreply, state}
   end
 
+  @avail_blocks MapSet.new(0..10000)
   def handle_info({:received_message, peer_id, %Piece{index: index, begin: begin, block: block}}, %{info_hash: h} = state) do
     #Logger.debug("GOT A PIECE #{inspect {index, begin}}")
     FileManager.write_block(h, index, begin, block)
@@ -84,17 +85,7 @@ defmodule Peer.Manager do
 
     timer("here2", fn ->
       if Peer.Manager.Store.outstanding_requests(h, peer_id) |> Enum.empty? do
-        1..10
-        |> Enum.reduce_while({[], index}, fn _, {blocks, piece_idx} ->
-          case Peer.Manager.Store.pop_missing_block(h, peer_id, piece_idx) do
-            # Keep track of the latest piece index we've received to keep us on the fast path
-            {idx, _, _} = block ->
-              {:cont, {[block | blocks], idx}}
-            nil ->
-              {:halt, {blocks, piece_idx}}
-          end
-        end)
-        |> elem(0)
+        Peer.BlockManager.get_blocks(h, @avail_blocks, 10, index)
         |> Enum.each(fn {idx, offset, size} ->
           send_msg(h, peer_id, %Request{index: idx, begin: offset, length: size})
         end)
@@ -168,7 +159,9 @@ defmodule Peer.Manager do
   defp find_priority_block(info_hash, peer_id) do
     start = System.monotonic_time(:millisecond)
 
-    block = Peer.Manager.Store.pop_missing_block(info_hash, peer_id)
+    avail_blocks = MapSet.new(0..10000)
+
+    block = Peer.BlockManager.get_blocks(info_hash, avail_blocks, 1, -1) |> List.first
 
     IO.puts("find prio #{System.monotonic_time(:millisecond) - start}")
     block
