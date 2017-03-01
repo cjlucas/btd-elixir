@@ -132,15 +132,7 @@ defmodule Peer.Connection do
     case Peer.Socket.send(sock, [<<byte_size(data)::32>>, data]) do
       {:ok, sock} ->
         Peer.EventManager.sent_message(hash, {id, msg})
-
-        state = case msg do
-          %Request{index: idx, begin: offset, length: size} ->
-            %{state | requests: MapSet.put(requests, {idx, offset, size})}
-          _ ->
-            state
-        end
-
-        {:noreply, %{state | sock: sock}}
+        handle_sent_msg(msg, %{state | sock: sock})
       {:error, reason} ->
         Logger.debug("Send failed with reason: #{reason}")
         {:stop, :normal, state}
@@ -168,18 +160,15 @@ defmodule Peer.Connection do
 
     {:noreply, state}
   end
-
   defp handle_msg(%Have{index: idx}, state) do
     %{info_hash: info_hash, peer_id: peer_id} = state
     :ok = Peer.Swarm.PieceSet.seen_pieces(info_hash, peer_id, idx)
 
     {:noreply, state}
   end
-
   defp handle_msg(%Choke{}, state) do
     {:noreply, %{state | choked: true}}
   end
-
   defp handle_msg(%Unchoke{}, state) do
     %{info_hash: info_hash, peer_id: peer_id} = state
 
@@ -190,15 +179,12 @@ defmodule Peer.Connection do
 
     {:noreply, %{state | choked: false}}
   end
-
   defp handle_msg(%Interested{}, state) do
     {:noreply, %{state | interested: true}}
   end
-
   defp handle_msg(%NotInterested{}, state) do
     {:noreply, %{state | interested: false}}
   end
-
   defp handle_msg(%Piece{index: idx, begin: offset, block: data}, state) do
     %{info_hash: info_hash, peer_id: peer_id, requests: requests} = state
 
@@ -213,8 +199,15 @@ defmodule Peer.Connection do
 
     {:noreply, %{state | requests: requests}}
   end
-
   defp handle_msg(_msg, state) do
+    {:noreply, state}
+  end
+
+  defp handle_sent_msg(%Request{index: idx, begin: offset, length: size}, state) do
+    %{requests: requests} = state
+    {:noreply, %{state | requests: MapSet.put(requests, {idx, offset, size})}}
+  end
+  defp handle_sent_msg(_msg, state) do
     {:noreply, state}
   end
 
