@@ -9,7 +9,7 @@ defmodule Peer.Manager.Store.Supervisor do
     child = worker(Peer.Manager.Store, [info_hash], id: {info_hash, :store}, restart: :transient)
     Supervisor.start_child(__MODULE__, child)
 
-    child = worker(Peer.PieceRarity, [info_hash], id: {info_hash, :piece_rarity}, restart: :transient)
+    child = worker(Peer.Swarm.PieceSet, [info_hash], id: {info_hash, :piece_set}, restart: :transient)
     Supervisor.start_child(__MODULE__, child)
 
     child = worker(Peer.BlockManager, [info_hash], id: {info_hash, :block_manager}, restart: :transient)

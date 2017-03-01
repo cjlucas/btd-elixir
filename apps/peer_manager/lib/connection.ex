@@ -149,7 +149,7 @@ defmodule Peer.Connection do
   end
 
   defp handle_msg(%Bitfield{bitfield: bits}, state) do
-    %{info_hash: info_hash} = state
+    %{info_hash: info_hash, peer_id: peer_id} = state
 
     bs = BitSet.from_binary(bits)
     piece_idxs =
@@ -159,14 +159,14 @@ defmodule Peer.Connection do
       |> Enum.filter(&elem(&1, 0) == 1)
       |> Enum.map(&elem(&1, 1))
 
-    :ok = Peer.PieceRarity.seen_pieces(info_hash, piece_idxs)
+    :ok = Peer.Swarm.PieceSet.seen_pieces(info_hash, peer_id, piece_idxs)
 
     {:noreply, %{state | bitfield: bs}}
   end
 
   defp handle_msg(%Have{index: idx}, state) do
-    %{info_hash: info_hash, bitfield: bf} = state
-    :ok = Peer.PieceRarity.seen_pieces(info_hash, idx)
+    %{info_hash: info_hash, peer_id: peer_id, bitfield: bf} = state
+    :ok = Peer.Swarm.PieceSet.seen_pieces(info_hash, peer_id, idx)
 
     {:noreply, %{state | bitfield: BitSet.set(bf, idx, 1)}}
   end

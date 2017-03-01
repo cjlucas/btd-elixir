@@ -46,7 +46,7 @@ defmodule Peer.BlockManager do
 
   def get_blocks(info_hash, available_pieces, num_blocks, piece_idx \\ -1) do
     via(info_hash) |> Agent.get_and_update(fn state ->
-      pieces = Peer.PieceRarity.pieces_by_rarity(info_hash)
+      pieces = Peer.Swarm.PieceSet.pieces_by_rarity(info_hash)
 
       {blocks, _, state} =
         1..num_blocks
