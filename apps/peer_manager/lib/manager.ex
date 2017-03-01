@@ -68,29 +68,11 @@ defmodule Peer.Manager do
     {:noreply, state}
   end
 
-  def handle_info({:received_message, peer_id, %Unchoke{}}, %{info_hash: info_hash} = state) do
-    Logger.debug("GOT UNCHOKE #{inspect peer_id}")
-    {idx, offset, size} = block = find_priority_block(info_hash, peer_id)
-    Logger.debug("GOT A PRIORITY BLOCK #{inspect block}")
-    send_msg(info_hash, peer_id, %Request{index: idx, begin: offset, length: size})
-    {:noreply, state}
-  end
-
-  @avail_blocks MapSet.new(0..10000)
   def handle_info({:received_message, peer_id, %Piece{index: index, begin: begin, block: block}}, %{info_hash: h} = state) do
     #Logger.debug("GOT A PIECE #{inspect {index, begin}}")
     FileManager.write_block(h, index, begin, block)
     :ok = Peer.Manager.Store.incr_downloaded(h, byte_size(block))
     :ok = Peer.Manager.Store.received_block(h, peer_id, {index, begin, byte_size(block)})
-
-    timer("here2", fn ->
-      if Peer.Manager.Store.outstanding_requests(h, peer_id) |> Enum.empty? do
-        Peer.BlockManager.get_blocks(h, @avail_blocks, 10, index)
-        |> Enum.each(fn {idx, offset, size} ->
-          send_msg(h, peer_id, %Request{index: idx, begin: offset, length: size})
-        end)
-      end
-    end)
 
     {:noreply, state}
   end
@@ -154,24 +136,6 @@ defmodule Peer.Manager do
           Logger.debug("No more available peers")
       end
     end)
-  end
-
-  defp find_priority_block(info_hash, peer_id) do
-    start = System.monotonic_time(:millisecond)
-
-    avail_blocks = MapSet.new(0..10000)
-
-    block = Peer.BlockManager.get_blocks(info_hash, avail_blocks, 1, -1) |> List.first
-
-    IO.puts("find prio #{System.monotonic_time(:millisecond) - start}")
-    block
-  end
-
-  defp timer(label, fun) do
-    unit = :microsecond
-    start = System.monotonic_time(unit)
-    fun.()
-    #IO.puts("#{label}: #{System.monotonic_time(unit) - start}")
   end
 
   defp via(info_hash) do

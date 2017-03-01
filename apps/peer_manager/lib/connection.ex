@@ -37,7 +37,7 @@ end
 defmodule Peer.Connection do
   use GenServer
   require Logger
-  alias Bittorrent.Message.{Bitfield, Have, Choke, Unchoke, Interested, NotInterested}
+  alias Bittorrent.Message.{Request, Piece, Bitfield, Have, Choke, Unchoke, Interested, NotInterested}
 
   defmodule State do
 
@@ -49,6 +49,7 @@ defmodule Peer.Connection do
       bitfield: nil,
       choked: true,
       interested: false,
+      requests: MapSet.new,
       in_bytes: 0,
       out_bytes: 0,
       read_pid: nil,
@@ -80,6 +81,8 @@ defmodule Peer.Connection do
     end)
 
     send(read_pid, 4)
+
+    send_msg(info_hash, peer_id, %Interested{})
 
     {:ok, %State{info_hash: info_hash, peer_id: peer_id, sock: sock, read_pid: read_pid}}
   end
@@ -130,11 +133,21 @@ defmodule Peer.Connection do
     {:reply, BitSet.get(bits, idx) == 1, state}
   end
 
-  def handle_cast({:send_msg, msg}, %{info_hash: hash, peer_id: id, sock: sock} = state) do
+  def handle_cast({:send_msg, msg}, state) do
+    %{info_hash: hash, peer_id: id, requests: requests, sock: sock} = state
+
     data = Bittorrent.Message.encode(msg)
     case Peer.Socket.send(sock, [<<byte_size(data)::32>>, data]) do
       {:ok, sock} ->
         Peer.EventManager.sent_message(hash, {id, msg})
+
+        state = case msg do
+          %Request{index: idx, begin: offset, length: size} ->
+            %{state | requests: MapSet.put(requests, {idx, offset, size})}
+          _ ->
+            state
+        end
+
         {:noreply, %{state | sock: sock}}
       {:error, reason} ->
         Logger.debug("Send failed with reason: #{reason}")
@@ -176,6 +189,13 @@ defmodule Peer.Connection do
   end
 
   defp handle_msg(%Unchoke{}, state) do
+    %{info_hash: info_hash, peer_id: peer_id} = state
+
+    Peer.BlockManager.get_blocks(info_hash, peer_id, 10)
+    |> Enum.each(fn {idx, offset, size} ->
+      send_msg(info_hash, peer_id, %Request{index: idx, begin: offset, length: size})
+    end)
+
     {:noreply, %{state | choked: false}}
   end
 
@@ -185,6 +205,21 @@ defmodule Peer.Connection do
 
   defp handle_msg(%NotInterested{}, state) do
     {:noreply, %{state | interested: false}}
+  end
+
+  defp handle_msg(%Piece{index: idx, begin: offset, block: data}, state) do
+    %{info_hash: info_hash, peer_id: peer_id, requests: requests} = state
+
+    requests = MapSet.delete(requests, {idx, offset, byte_size(data)})
+    if MapSet.size(requests) == 0 do
+
+      Peer.BlockManager.get_blocks(info_hash, peer_id, 10, idx)
+      |> Enum.each(fn {idx, offset, size} ->
+        send_msg(info_hash, peer_id, %Request{index: idx, begin: offset, length: size})
+      end)
+    end
+
+    {:noreply, %{state | requests: requests}}
   end
 
   defp handle_msg(_msg, state) do
