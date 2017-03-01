@@ -21,19 +21,6 @@ defmodule Peer.Manager do
     {:ok, _} = Peer.EventManager.register(info_hash)
     {:ok, _} = File.EventManager.register(info_hash)
 
-    blocks =
-      FileManager.pieces(info_hash)
-      |> Enum.with_index
-      |> Enum.flat_map(fn {blocks, piece_idx} ->
-        Enum.map(blocks, &Tuple.insert_at(&1, 0, piece_idx))
-      end)
-      |> Enum.filter(fn {_, _, _, status} -> status == :need end)
-      |> Enum.map(&Tuple.delete_at(&1, 3))
-
-    IO.puts(inspect blocks)
-
-    :ok = Peer.Manager.Store.set_missing_blocks(info_hash, blocks)
-
     {:ok, %State{info_hash: info_hash}}
   end
 
@@ -49,30 +36,10 @@ defmodule Peer.Manager do
     {:noreply, state}
   end
 
-  def handle_info({:peer_disconnected, peer_id}, %{info_hash: h} = state) do
-    :ok = Peer.Manager.Store.remove_peer(h, peer_id)
-    {:noreply, state}
-  end
-
-  def handle_info({:received_message, peer_id, %Bitfield{bitfield: bits}}, %{info_hash: info_hash} = state) do
-    bs = BitSet.from_binary(bits)
-
-    :ok = Peer.Manager.Store.seen_bitfield(info_hash, peer_id, bs)
-
-    send_msg(info_hash, peer_id, %Interested{})
-    {:noreply, state}
-  end
-
-  def handle_info({:received_message, peer_id, %Have{index: idx}}, %{info_hash: info_hash} = state) do
-    :ok = Peer.Manager.Store.seen_piece(info_hash, peer_id, idx)
-    {:noreply, state}
-  end
-
   def handle_info({:received_message, peer_id, %Piece{index: index, begin: begin, block: block}}, %{info_hash: h} = state) do
     #Logger.debug("GOT A PIECE #{inspect {index, begin}}")
     FileManager.write_block(h, index, begin, block)
     :ok = Peer.Manager.Store.incr_downloaded(h, byte_size(block))
-    :ok = Peer.Manager.Store.received_block(h, peer_id, {index, begin, byte_size(block)})
 
     {:noreply, state}
   end
@@ -94,11 +61,6 @@ defmodule Peer.Manager do
 
   def handle_info({:sent_message, _peer_id, %Piece{block: block}}, %{info_hash: h} = state) do
     Peer.Manager.Store.incr_uploaded(h, byte_size(block))
-    {:noreply, state}
-  end
-
-  def handle_info({:sent_message, peer_id, %Request{index: idx, begin: offset, length: len}}, %{info_hash: h} = state) do
-    :ok = Peer.Manager.Store.requested_block(h, peer_id, {idx, offset, len})
     {:noreply, state}
   end
 
