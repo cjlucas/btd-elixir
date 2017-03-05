@@ -64,10 +64,6 @@ defmodule Peer.Connection do
     via(info_hash, peer_id) |> GenServer.cast({:send_msg, msg})
   end
 
-  def has_piece?(info_hash, peer_id, idx) do
-    via(info_hash, peer_id) |> GenServer.cast({:has_piece?, idx})
-  end
-
   def init({info_hash, peer_id, %{sock: s} = sock, initial_data}) do
     #{:ok, {host, port}} = :inet.peername(sock.sock)
     #host = host |> Tuple.to_list |> Enum.join(".")
