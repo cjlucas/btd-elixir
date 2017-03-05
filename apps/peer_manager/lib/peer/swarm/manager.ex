@@ -1,4 +1,4 @@
-defmodule Peer.Manager do
+defmodule Peer.Swarm.Manager do
   use GenServer
   require Logger
   alias Bittorrent.Message.{Bitfield, Request, Interested, Piece, Have}

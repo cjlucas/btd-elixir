@@ -13,7 +13,7 @@ defmodule PeerManager do
       supervisor(Peer.Manager.Store.Registry, []),
       worker(Registry, [:unique, Peer.Manager.Registry]),
       supervisor(Peer.Manager.Store.Supervisor, []),
-      supervisor(Peer.Manager.Supervisor, []),
+      supervisor(Peer.Swarm.Manager.Supervisor, []),
     ]
 
     Supervisor.start_link(children, [strategy: :one_for_one])
@@ -25,7 +25,7 @@ defmodule PeerManager do
 
   def register(info_hash) do
     {:ok, _} = Peer.Manager.Store.Supervisor.start_child(info_hash)
-    {:ok, _} = Peer.Manager.Supervisor.start_child(info_hash)
+    {:ok, _} = Peer.Swarm.Manager.Supervisor.start_child(info_hash)
     :ok
   end
 
@@ -35,12 +35,12 @@ defmodule PeerManager do
 
     :ok = Supervisor.terminate_child(Peer.Manager.Store.Supervisor, info_hash)
     :ok = Supervisor.delete_child(Peer.Manager.Store.Supervisor, info_hash)
-    :ok = Supervisor.terminate_child(Peer.Manager.Supervisor, info_hash)
-    :ok = Supervisor.delete_child(Peer.Manager.Supervisor, info_hash)
+    :ok = Supervisor.terminate_child(Peer.Swarm.Manager.Supervisor, info_hash)
+    :ok = Supervisor.delete_child(Peer.Swarm.Manager.Supervisor, info_hash)
   end
 
   @spec add_peers(binary, [{String.t, integer}]) :: :ok
   def add_peers(info_hash, peers) do
-    Peer.Manager.add_peers(info_hash, peers)
+    Peer.Swarm.Manager.add_peers(info_hash, peers)
   end
 end
