@@ -37,7 +37,7 @@ end
 defmodule Peer.Connection do
   use GenServer
   require Logger
-  alias Bittorrent.Message.{Bitfield, Choke, Unchoke, Interested, NotInterested}
+  alias Bittorrent.Message.{Request, Piece, Bitfield, Have, Choke, Unchoke, Interested, NotInterested}
 
   defmodule State do
 
@@ -46,9 +46,9 @@ defmodule Peer.Connection do
     defstruct info_hash: <<>>,
       peer_id: <<>>,
       sock: nil,
-      bitfield: nil,
       choked: true,
       interested: false,
+      requests: MapSet.new,
       in_bytes: 0,
       out_bytes: 0,
       read_pid: nil,
@@ -56,21 +56,18 @@ defmodule Peer.Connection do
   end
 
   def start_link(info_hash, peer_id, sock, initial_data) do
-    GenServer.start_link(__MODULE__, {info_hash, peer_id, sock, initial_data})
+    name = via(info_hash, peer_id)
+    GenServer.start_link(__MODULE__, {info_hash, peer_id, sock, initial_data}, name: name)
   end
 
-  def send_msg(pid, msg) do
-    GenServer.cast(pid, {:send_msg, msg})
-  end
-
-  def has_piece?(pid, idx) do
-    GenServer.call(pid, {:has_piece?, idx})
+  def send_msg(info_hash, peer_id, msg) do
+    via(info_hash, peer_id) |> GenServer.cast({:send_msg, msg})
   end
 
   def init({info_hash, peer_id, %{sock: s} = sock, initial_data}) do
     #{:ok, {host, port}} = :inet.peername(sock.sock)
     #host = host |> Tuple.to_list |> Enum.join(".")
-    Peer.Registry.register(info_hash, peer_id)
+    :ok = Peer.Swarm.Registry.register(info_hash, peer_id)
     Peer.EventManager.peer_connected(info_hash, peer_id)
 
     pid = self()
@@ -79,6 +76,8 @@ defmodule Peer.Connection do
     end)
 
     send(read_pid, 4)
+
+    send_msg(info_hash, peer_id, %Interested{})
 
     {:ok, %State{info_hash: info_hash, peer_id: peer_id, sock: sock, read_pid: read_pid}}
   end
@@ -122,52 +121,97 @@ defmodule Peer.Connection do
     {:stop, :normal, state}
   end
 
-  def handle_call({:has_piece?, _idx}, _from, %{bitfield: bits} = state) when is_nil(bits) do
-    {:reply, false, state}
-  end
-  def handle_call({:has_piece?, idx}, _from, %{bitfield: bits} = state) do
-    {:reply, BitSet.get(bits, idx) == 1, state}
-  end
+  def handle_cast({:send_msg, msg}, state) do
+    %{info_hash: hash, peer_id: id, requests: requests, sock: sock} = state
 
-  def handle_cast({:send_msg, msg}, %{info_hash: hash, peer_id: id, sock: sock} = state) do
     data = Bittorrent.Message.encode(msg)
     case Peer.Socket.send(sock, [<<byte_size(data)::32>>, data]) do
       {:ok, sock} ->
         Peer.EventManager.sent_message(hash, {id, msg})
-        {:noreply, %{state | sock: sock}}
+        handle_sent_msg(msg, %{state | sock: sock})
       {:error, reason} ->
         Logger.debug("Send failed with reason: #{reason}")
         {:stop, :normal, state}
     end
   end
 
-  def terminate(_reason, %{info_hash: info_hash, peer_id: id, sock: sock}) do
+  def terminate(_reason, %{info_hash: info_hash, peer_id: id, sock: sock, requests: reqs}) do
     Logger.debug("In terminate")
-    Peer.EventManager.peer_disconnected(info_hash, id)
+    #Peer.EventManager.peer_disconnected(info_hash, id)
+    :ok = Peer.BlockManager.put_blocks(info_hash, reqs)
     Peer.Socket.close(sock)
   end
 
   defp handle_msg(%Bitfield{bitfield: bits}, state) do
-    {:noreply, %{state | bitfield: BitSet.from_binary(bits)}}
-  end
+    %{info_hash: info_hash, peer_id: peer_id} = state
 
+    bs = BitSet.from_binary(bits)
+    piece_idxs =
+      bs
+      |> Enum.to_list
+      |> Enum.with_index
+      |> Enum.filter(&elem(&1, 0) == 1)
+      |> Enum.map(&elem(&1, 1))
+
+    :ok = Peer.Swarm.PieceSet.seen_pieces(info_hash, peer_id, piece_idxs)
+
+    {:noreply, state}
+  end
+  defp handle_msg(%Have{index: idx}, state) do
+    %{info_hash: info_hash, peer_id: peer_id} = state
+    :ok = Peer.Swarm.PieceSet.seen_pieces(info_hash, peer_id, idx)
+
+    {:noreply, state}
+  end
   defp handle_msg(%Choke{}, state) do
     {:noreply, %{state | choked: true}}
   end
-
   defp handle_msg(%Unchoke{}, state) do
+    %{info_hash: info_hash, peer_id: peer_id} = state
+
+    Peer.BlockManager.get_blocks(info_hash, peer_id, 30)
+    |> Enum.each(fn {idx, offset, size} ->
+      send_msg(info_hash, peer_id, %Request{index: idx, begin: offset, length: size})
+    end)
+
     {:noreply, %{state | choked: false}}
   end
-
   defp handle_msg(%Interested{}, state) do
     {:noreply, %{state | interested: true}}
   end
-
   defp handle_msg(%NotInterested{}, state) do
     {:noreply, %{state | interested: false}}
   end
+  defp handle_msg(%Piece{index: idx, begin: offset, block: data}, state) do
+    %{info_hash: info_hash, peer_id: peer_id, requests: requests} = state
 
+    block = {idx, offset, byte_size(data)}
+    requests = MapSet.delete(requests, block)
+    :ok = Peer.BlockManager.remove_blocks(info_hash, [block])
+
+    if MapSet.size(requests) <= 5 do
+      Peer.BlockManager.get_blocks(info_hash, peer_id, 30, idx)
+      |> Enum.each(fn {idx, offset, size} ->
+        send_msg(info_hash, peer_id, %Request{index: idx, begin: offset, length: size})
+      end)
+    end
+
+    {:noreply, %{state | requests: requests}}
+  end
   defp handle_msg(_msg, state) do
     {:noreply, state}
+  end
+
+  defp handle_sent_msg(%Request{index: idx, begin: offset, length: size}, state) do
+    %{requests: requests} = state
+    {:noreply, %{state | requests: MapSet.put(requests, {idx, offset, size})}}
+  end
+  defp handle_sent_msg(_msg, state) do
+    {:noreply, state}
+  end
+
+  defp via(info_hash, peer_id) do
+    key = {info_hash, peer_id}
+    {:via, Registry, {Peer.Registry, key}}
   end
 end
