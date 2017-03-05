@@ -139,9 +139,10 @@ defmodule Peer.Connection do
     end
   end
 
-  def terminate(_reason, %{info_hash: info_hash, peer_id: id, sock: sock}) do
+  def terminate(_reason, %{info_hash: info_hash, peer_id: id, sock: sock, requests: reqs}) do
     Logger.debug("In terminate")
-    Peer.EventManager.peer_disconnected(info_hash, id)
+    #Peer.EventManager.peer_disconnected(info_hash, id)
+    :ok = Peer.BlockManager.put_blocks(info_hash, reqs)
     Peer.Socket.close(sock)
   end
 
@@ -172,7 +173,7 @@ defmodule Peer.Connection do
   defp handle_msg(%Unchoke{}, state) do
     %{info_hash: info_hash, peer_id: peer_id} = state
 
-    Peer.BlockManager.get_blocks(info_hash, peer_id, 10)
+    Peer.BlockManager.get_blocks(info_hash, peer_id, 30)
     |> Enum.each(fn {idx, offset, size} ->
       send_msg(info_hash, peer_id, %Request{index: idx, begin: offset, length: size})
     end)
@@ -188,10 +189,12 @@ defmodule Peer.Connection do
   defp handle_msg(%Piece{index: idx, begin: offset, block: data}, state) do
     %{info_hash: info_hash, peer_id: peer_id, requests: requests} = state
 
-    requests = MapSet.delete(requests, {idx, offset, byte_size(data)})
-    if MapSet.size(requests) == 0 do
+    block = {idx, offset, byte_size(data)}
+    requests = MapSet.delete(requests, block)
+    :ok = Peer.BlockManager.remove_blocks(info_hash, [block])
 
-      Peer.BlockManager.get_blocks(info_hash, peer_id, 10, idx)
+    if MapSet.size(requests) <= 5 do
+      Peer.BlockManager.get_blocks(info_hash, peer_id, 30, idx)
       |> Enum.each(fn {idx, offset, size} ->
         send_msg(info_hash, peer_id, %Request{index: idx, begin: offset, length: size})
       end)

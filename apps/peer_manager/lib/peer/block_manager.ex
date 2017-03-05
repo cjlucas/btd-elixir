@@ -60,9 +60,6 @@ defmodule Peer.BlockManager do
             else
               pieces
               |> Enum.reduce_while([], fn idx, acc ->
-                blocks     = Map.get(blocks, idx, MapSet.new)
-                req_blocks = Map.get(requested_blocks, idx, MapSet.new)
-
                 acc =
                   if MapSet.member?(available_pieces, idx) && State.has_available_blocks?(state, idx) do
                     [idx | acc]
@@ -94,6 +91,32 @@ defmodule Peer.BlockManager do
         end)
 
         {blocks, state}
+    end)
+  end
+
+  def remove_blocks(info_hash, blocks) do
+    via(info_hash) |> Agent.update(fn state ->
+      %{blocks: all_blocks, requested_blocks: reqs} = state
+      %{state |
+        blocks: do_remove_blocks(all_blocks, blocks),
+        requested_blocks: do_remove_blocks(reqs, blocks)}
+    end)
+  end
+
+  def put_blocks(info_hash, blocks) do
+    via(info_hash) |> Agent.update(fn %{requested_blocks: reqs} = state ->
+      IO.puts("IN PUT BLOCKS #{inspect blocks}")
+      %{state | requested_blocks: do_remove_blocks(reqs, blocks)}
+    end)
+  end
+
+  defp do_remove_blocks(map, blocks) do
+    Enum.reduce(blocks, map, fn {idx, _, _} = block, acc ->
+      if Map.has_key?(acc, idx) do
+        Map.update!(acc, idx, &MapSet.delete(&1, block))
+      else
+        acc
+      end
     end)
   end
 
