@@ -20,6 +20,7 @@ defmodule Torrent.Supervisor do
       supervisor(Swarm.Stats.Registry, []),
       registry(:unique, Peer.Manager.Registry),
       supervisor(Swarm.Manager.Supervisor, []),
+      worker(TrackerEventHandler, []),
     ]
 
     supervise(children, strategy: :one_for_one)
