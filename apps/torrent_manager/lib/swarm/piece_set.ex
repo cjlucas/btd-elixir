@@ -1,4 +1,4 @@
-defmodule Peer.Swarm.PieceSet do
+defmodule Swarm.PieceSet do
 
   @type info_hash :: binary
 

@@ -37,7 +37,7 @@ end
 defmodule Peer.Connection do
   use GenServer
   require Logger
-  alias Bittorrent.Message.{Request, Piece, Bitfield, Have, Choke, Unchoke, Interested, NotInterested}
+  alias Peer.Message.{Request, Piece, Bitfield, Have, Choke, Unchoke, Interested, NotInterested}
 
   defmodule State do
 
@@ -67,8 +67,8 @@ defmodule Peer.Connection do
   def init({info_hash, peer_id, %{sock: s} = sock, initial_data}) do
     #{:ok, {host, port}} = :inet.peername(sock.sock)
     #host = host |> Tuple.to_list |> Enum.join(".")
-    :ok = Peer.Swarm.Registry.register(info_hash, peer_id)
-    Peer.EventManager.peer_connected(info_hash, peer_id)
+    :ok = Swarm.Registry.register(info_hash, peer_id)
+    Swarm.EventManager.peer_connected(info_hash, peer_id)
 
     pid = self()
     read_pid = spawn_link(fn ->
@@ -104,9 +104,9 @@ defmodule Peer.Connection do
 
     state = %{state | read_state: :awaiting_length, sock: sock}
 
-    case Bittorrent.Message.parse(data) do
+    case Peer.Message.parse(data) do
       {:ok, msg} ->
-        Peer.EventManager.received_message(hash, {id, msg})
+        Swarm.EventManager.received_message(hash, {id, msg})
         handle_msg(msg, state)
       {:error, reason} ->
         Logger.debug("Error parsing packet: #{reason}")
@@ -124,10 +124,10 @@ defmodule Peer.Connection do
   def handle_cast({:send_msg, msg}, state) do
     %{info_hash: hash, peer_id: id, requests: requests, sock: sock} = state
 
-    data = Bittorrent.Message.encode(msg)
+    data = Peer.Message.encode(msg)
     case Peer.Socket.send(sock, [<<byte_size(data)::32>>, data]) do
       {:ok, sock} ->
-        Peer.EventManager.sent_message(hash, {id, msg})
+        Swarm.EventManager.sent_message(hash, {id, msg})
         handle_sent_msg(msg, %{state | sock: sock})
       {:error, reason} ->
         Logger.debug("Send failed with reason: #{reason}")
@@ -135,10 +135,10 @@ defmodule Peer.Connection do
     end
   end
 
-  def terminate(_reason, %{info_hash: info_hash, peer_id: id, sock: sock, requests: reqs}) do
-    Logger.debug("In terminate")
-    #Peer.EventManager.peer_disconnected(info_hash, id)
-    :ok = Peer.BlockManager.put_blocks(info_hash, reqs)
+  def terminate(reason, %{info_hash: info_hash, peer_id: id, sock: sock, requests: reqs}) do
+    Logger.debug("In terminate #{reason}")
+    #Swarm.EventManager.peer_disconnected(info_hash, id)
+    :ok = Torrent.BlockManager.put_blocks(info_hash, reqs)
     Peer.Socket.close(sock)
   end
 
@@ -153,13 +153,13 @@ defmodule Peer.Connection do
       |> Enum.filter(&elem(&1, 0) == 1)
       |> Enum.map(&elem(&1, 1))
 
-    :ok = Peer.Swarm.PieceSet.seen_pieces(info_hash, peer_id, piece_idxs)
+    :ok = Swarm.PieceSet.seen_pieces(info_hash, peer_id, piece_idxs)
 
     {:noreply, state}
   end
   defp handle_msg(%Have{index: idx}, state) do
     %{info_hash: info_hash, peer_id: peer_id} = state
-    :ok = Peer.Swarm.PieceSet.seen_pieces(info_hash, peer_id, idx)
+    :ok = Swarm.PieceSet.seen_pieces(info_hash, peer_id, idx)
 
     {:noreply, state}
   end
@@ -169,7 +169,7 @@ defmodule Peer.Connection do
   defp handle_msg(%Unchoke{}, state) do
     %{info_hash: info_hash, peer_id: peer_id} = state
 
-    Peer.BlockManager.get_blocks(info_hash, peer_id, 30)
+    Torrent.BlockManager.get_blocks(info_hash, peer_id, 30)
     |> Enum.each(fn {idx, offset, size} ->
       send_msg(info_hash, peer_id, %Request{index: idx, begin: offset, length: size})
     end)
@@ -187,10 +187,10 @@ defmodule Peer.Connection do
 
     block = {idx, offset, byte_size(data)}
     requests = MapSet.delete(requests, block)
-    :ok = Peer.BlockManager.remove_blocks(info_hash, [block])
+    :ok = Torrent.BlockManager.remove_blocks(info_hash, [block])
 
     if MapSet.size(requests) <= 5 do
-      Peer.BlockManager.get_blocks(info_hash, peer_id, 30, idx)
+      Torrent.BlockManager.get_blocks(info_hash, peer_id, 30, idx)
       |> Enum.each(fn {idx, offset, size} ->
         send_msg(info_hash, peer_id, %Request{index: idx, begin: offset, length: size})
       end)

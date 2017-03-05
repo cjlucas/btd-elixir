@@ -1,5 +1,5 @@
-defmodule Peer.Swarm.PieceSetTest do
-  alias Peer.Swarm.PieceSet
+defmodule Swarm.PieceSetTest do
+  alias Swarm.PieceSet
   use ExUnit.Case
 
   test "seen_piece/2, seen_pieces/2 and pieces_by_rarity/1" do

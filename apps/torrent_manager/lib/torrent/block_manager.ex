@@ -1,4 +1,4 @@
-defmodule Peer.BlockManager do
+defmodule Torrent.BlockManager do
 
   @type info_hash :: binary
 
@@ -46,8 +46,8 @@ defmodule Peer.BlockManager do
 
   def get_blocks(info_hash, peer_id, num_blocks, piece_idx \\ -1) do
     via(info_hash) |> Agent.get_and_update(fn state ->
-      pieces           = Peer.Swarm.PieceSet.pieces_by_rarity(info_hash)
-      available_pieces = Peer.Swarm.PieceSet.pieces(info_hash, peer_id)
+      pieces           = Swarm.PieceSet.pieces_by_rarity(info_hash)
+      available_pieces = Swarm.PieceSet.pieces(info_hash, peer_id)
 
       {blocks, _, state} =
         1..num_blocks

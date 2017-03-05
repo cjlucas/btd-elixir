@@ -1,3 +1,4 @@
+ExUnit.configure(capture_log: true)
 ExUnit.start()
 
 defmodule HelperSigils do

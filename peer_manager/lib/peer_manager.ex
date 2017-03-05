@@ -5,15 +5,15 @@ defmodule PeerManager do
     import Supervisor.Spec, warn: false
 
     children = [
-      supervisor(Peer.Swarm.Registry, []),
+      supervisor(Swarm.Registry, []),
       registry(:unique, Peer.Registry),
-      worker(Peer.EventManager, []),
+      worker(Swarm.EventManager, []),
       supervisor(Peer.Handshake.Supervisor, []),
       supervisor(Peer.Connection.Supervisor, []),
-      supervisor(Peer.Manager.Store.Registry, []),
+      supervisor(Swarm.Stats.Registry, []),
       worker(Registry, [:unique, Peer.Manager.Registry]),
-      supervisor(Peer.Manager.Store.Supervisor, []),
-      supervisor(Peer.Swarm.Manager.Supervisor, []),
+      supervisor(Swarm.Stats.Supervisor, []),
+      supervisor(Swarm.Manager.Supervisor, []),
     ]
 
     Supervisor.start_link(children, [strategy: :one_for_one])
@@ -24,8 +24,8 @@ defmodule PeerManager do
   end
 
   def register(info_hash) do
-    {:ok, _} = Peer.Manager.Store.Supervisor.start_child(info_hash)
-    {:ok, _} = Peer.Swarm.Manager.Supervisor.start_child(info_hash)
+    {:ok, _} = Swarm.Stats.Supervisor.start_child(info_hash)
+    {:ok, _} = Swarm.Manager.Supervisor.start_child(info_hash)
     :ok
   end
 
@@ -33,14 +33,14 @@ defmodule PeerManager do
     Peer.Registry.lookup(info_hash)
     |> Enum.each(&GenServer.stop(&1))
 
-    :ok = Supervisor.terminate_child(Peer.Manager.Store.Supervisor, info_hash)
-    :ok = Supervisor.delete_child(Peer.Manager.Store.Supervisor, info_hash)
-    :ok = Supervisor.terminate_child(Peer.Swarm.Manager.Supervisor, info_hash)
-    :ok = Supervisor.delete_child(Peer.Swarm.Manager.Supervisor, info_hash)
+    :ok = Supervisor.terminate_child(Swarm.Stats.Supervisor, info_hash)
+    :ok = Supervisor.delete_child(Swarm.Stats.Supervisor, info_hash)
+    :ok = Supervisor.terminate_child(Swarm.Manager.Supervisor, info_hash)
+    :ok = Supervisor.delete_child(Swarm.Manager.Supervisor, info_hash)
   end
 
   @spec add_peers(binary, [{String.t, integer}]) :: :ok
   def add_peers(info_hash, peers) do
-    Peer.Swarm.Manager.add_peers(info_hash, peers)
+    Swarm.Manager.add_peers(info_hash, peers)
   end
 end

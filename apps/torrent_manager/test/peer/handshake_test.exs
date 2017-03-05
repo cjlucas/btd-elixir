@@ -11,7 +11,7 @@ defmodule Peer.HandshakeTest do
   setup do
     {:ok, listen} = :gen_tcp.listen(0, [:binary, active: false])
 
-    {:ok, _} = Peer.Manager.Store.start_link(@info_hash)
+    {:ok, _} = Swarm.Stats.start_link(@info_hash)
 
     on_exit fn ->
       :gen_tcp.close(listen)
@@ -98,6 +98,8 @@ defmodule Peer.HandshakeTest do
 
     assert_receive {:EXIT, ^pid, :normal}
     assert Supervisor.count_children(Peer.Connection.Supervisor).workers == 1
+
+    Process.sleep(1000)
 
     :gen_tcp.close(ssock)
   end

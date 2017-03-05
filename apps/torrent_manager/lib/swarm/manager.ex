@@ -1,7 +1,7 @@
-defmodule Peer.Swarm.Manager do
+defmodule Swarm.Manager do
   use GenServer
   require Logger
-  alias Bittorrent.Message.{Bitfield, Request, Interested, Piece, Have}
+  alias Peer.Message.{Bitfield, Request, Interested, Piece, Have}
 
   @max_peers 50
 
@@ -18,14 +18,14 @@ defmodule Peer.Swarm.Manager do
   end
 
   def init(info_hash) do
-    {:ok, _} = Peer.EventManager.register(info_hash)
+    {:ok, _} = Swarm.EventManager.register(info_hash)
     {:ok, _} = File.EventManager.register(info_hash)
 
     {:ok, %State{info_hash: info_hash}}
   end
 
   def handle_call({:add_peers, peers}, _from, %{info_hash: h} = state) do
-    :ok = Peer.Manager.Store.add_peers(h, peers)
+    :ok = Swarm.Stats.add_peers(h, peers)
     connect_to_peers(h)
 
     {:reply, :ok, state}
@@ -39,7 +39,7 @@ defmodule Peer.Swarm.Manager do
   def handle_info({:received_message, peer_id, %Piece{index: index, begin: begin, block: block}}, %{info_hash: h} = state) do
     #Logger.debug("GOT A PIECE #{inspect {index, begin}}")
     FileManager.write_block(h, index, begin, block)
-    :ok = Peer.Manager.Store.incr_downloaded(h, byte_size(block))
+    :ok = Swarm.Stats.incr_downloaded(h, byte_size(block))
 
     {:noreply, state}
   end
@@ -60,7 +60,7 @@ defmodule Peer.Swarm.Manager do
   end
 
   def handle_info({:sent_message, _peer_id, %Piece{block: block}}, %{info_hash: h} = state) do
-    Peer.Manager.Store.incr_uploaded(h, byte_size(block))
+    Swarm.Stats.incr_uploaded(h, byte_size(block))
     {:noreply, state}
   end
 
@@ -80,7 +80,7 @@ defmodule Peer.Swarm.Manager do
   end
 
   defp dispatch_msg(info_hash, msg) do
-    Peer.Swarm.Registry.lookup(info_hash)
+    Swarm.Registry.lookup(info_hash)
     |> Enum.each(&Peer.Connection.send_msg(info_hash, &1, msg))
   end
 
@@ -89,9 +89,9 @@ defmodule Peer.Swarm.Manager do
   end
 
   defp connect_to_peers(info_hash) do
-    1..@max_peers-length(Peer.Swarm.Registry.lookup(info_hash))
+    1..@max_peers-length(Swarm.Registry.lookup(info_hash))
     |> Enum.each(fn _ ->
-      case Peer.Manager.Store.pop_peer(info_hash) do
+      case Swarm.Stats.pop_peer(info_hash) do
         {host, port} ->
           Peer.Handshake.Supervisor.connect(host, port, info_hash)
         nil ->

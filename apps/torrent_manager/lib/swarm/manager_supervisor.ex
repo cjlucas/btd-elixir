@@ -1,4 +1,4 @@
-defmodule Peer.Swarm.Manager.Supervisor do
+defmodule Swarm.Manager.Supervisor do
   use Supervisor
 
   def start_link do
@@ -6,7 +6,7 @@ defmodule Peer.Swarm.Manager.Supervisor do
   end
 
   def start_child(info_hash) do
-    child = worker(Peer.Swarm.Manager, [info_hash], id: info_hash, restart: :transient)
+    child = worker(Swarm.Manager, [info_hash], id: info_hash, restart: :transient)
     Supervisor.start_child(__MODULE__, child)
   end
 

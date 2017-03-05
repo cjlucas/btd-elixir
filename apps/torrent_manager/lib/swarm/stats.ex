@@ -1,4 +1,4 @@
-defmodule Peer.Manager.Store do
+defmodule Swarm.Stats do
   defmodule State do
     defstruct skey_hash: <<>>,
     peer_id: <<>>,
@@ -10,7 +10,7 @@ defmodule Peer.Manager.Store do
   def start_link(info_hash) do
     Agent.start_link(fn ->
       skey_hash = Peer.HandshakeUtils.req2(info_hash)
-      {:ok, _ } = Peer.Manager.Store.Registry.register_skey_hash(skey_hash, info_hash)
+      {:ok, _ } = Swarm.Stats.Registry.register_skey_hash(skey_hash, info_hash)
 
       %State{
         skey_hash: skey_hash,
@@ -66,6 +66,6 @@ defmodule Peer.Manager.Store do
   end
 
   defp via(info_hash) do
-    {:via, Registry, {Peer.Manager.Store.Registry, {:info_hash, info_hash}}}
+    {:via, Registry, {Swarm.Stats.Registry, {:info_hash, info_hash}}}
   end
 end

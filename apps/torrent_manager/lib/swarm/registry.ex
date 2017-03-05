@@ -1,4 +1,4 @@
-defmodule Peer.Swarm.Registry do
+defmodule Swarm.Registry do
 
   @type info_hash :: binary
 

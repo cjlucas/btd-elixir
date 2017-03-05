@@ -1,4 +1,4 @@
-defmodule Bittorrent.Message do
+defmodule Peer.Message do
   defmodule Choke do
     defstruct []
   end

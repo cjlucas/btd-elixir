@@ -1,4 +1,4 @@
-defmodule Peer.EventManager do
+defmodule Swarm.EventManager do
 
   @name __MODULE__
 
