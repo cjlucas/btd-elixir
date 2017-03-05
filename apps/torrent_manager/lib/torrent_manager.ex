@@ -12,7 +12,9 @@ defmodule TorrentManager do
 
     :ok = Torrent.Store.add(t)
     :ok = FileManager.register(info_hash, root, files, pieces, piece_len)
-    :ok = PeerManager.register(info_hash)
+    :ok = Swarm.Supervisor.start_child(info_hash)
+    {:ok, _} = Swarm.Manager.Supervisor.start_child(info_hash)
+    :ok
   end
 
   @spec start(binary) :: :ok | {:error, :already_started}
